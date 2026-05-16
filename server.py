@@ -86,7 +86,7 @@ def ask_endpoint(payload: AskRequest) -> dict:
         "question": question,
         "answer": answer["answer"],
         "mode": answer["mode"],
-        "sources": matches,
+        "sources": answer["sources"],
     }
 
 

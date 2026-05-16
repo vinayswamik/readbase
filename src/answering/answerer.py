@@ -19,10 +19,37 @@ SYSTEM_PROMPT = (
     "say what is missing."
 )
 
+# Reject answers when retrieval confidence is too low (tune with on-repo vs off-topic questions).
+MIN_RELEVANCE_SCORE = 0.6
+OUT_OF_SCOPE_MESSAGE = (
+    "That question doesn't look related to this indexed repository. "
+    "Try asking about a file, function, class, or feature in the codebase."
+)
+
+
+def best_match_score(matches: list[dict]) -> float:
+    return max((float(match.get("score", 0.0)) for match in matches), default=0.0)
+
+
+def filter_relevant_matches(matches: list[dict]) -> list[dict]:
+    return [
+        match
+        for match in matches
+        if float(match.get("score", 0.0)) >= MIN_RELEVANCE_SCORE
+    ]
+
 
 # Decide whether to call Claude or fall back to retrieval-only text. The rest of
-# the app always receives the same shape: {"answer": ..., "mode": ...}.
+# the app always receives the same shape: {"answer": ..., "mode": ..., "sources": ...}.
 def answer_question(question: str, matches: list[dict]) -> dict:
+    if not matches or best_match_score(matches) < MIN_RELEVANCE_SCORE:
+        return {
+            "answer": OUT_OF_SCOPE_MESSAGE,
+            "mode": "out_of_scope",
+            "sources": [],
+        }
+
+    sources = filter_relevant_matches(matches)
     api_key, model = load_llm_settings()
     if api_key and model and matches:
         try:
@@ -33,7 +60,7 @@ def answer_question(question: str, matches: list[dict]) -> dict:
                 question=question,
                 matches=matches,
             )
-            return {"answer": answer, "mode": "anthropic"}
+            return {"answer": answer, "mode": "anthropic", "sources": sources}
         except RuntimeError as exc:
             # If the network/API fails, still return useful evidence instead of
             # making the user lose the whole answer.
@@ -45,8 +72,13 @@ def answer_question(question: str, matches: list[dict]) -> dict:
             return {
                 "answer": f"{fallback}\n\nAnthropic synthesis failed: {exc}",
                 "mode": "retrieval_fallback",
+                "sources": sources,
             }
-    return {"answer": extractive_answer(question, matches), "mode": "retrieval"}
+    return {
+        "answer": extractive_answer(question, matches),
+        "mode": "retrieval",
+        "sources": sources,
+    }
 
 
 # Load secrets/config from `.env` into process environment, then read the two
