@@ -1,9 +1,0 @@
-Metadata-Version: 2.4
-Name: readbase
-Version: 0.2.0
-Summary: Codebase Q&A with local RAG indexing
-Requires-Python: >=3.10
-Requires-Dist: certifi>=2024.8.30
-Requires-Dist: chromadb>=1.3.0
-Requires-Dist: fastapi>=0.135.0
-Requires-Dist: uvicorn>=0.43.0

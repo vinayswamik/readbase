@@ -8,10 +8,10 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from readbase.answering.answerer import answer_question
-from readbase.answering.retriever import index_exists, load_index, search
-from readbase.repo_ingestion.repo_manager import RepoError, index_repo, list_indexes
-from readbase.settings import DEFAULT_TOP_K
+from src.answering.answerer import answer_question
+from src.answering.retriever import index_exists, load_index, search
+from src.repo_ingestion.repo_manager import RepoError, index_repo, list_indexes
+from src.settings import DEFAULT_TOP_K
 
 # Local dev bind address and where built UI assets live on disk.
 HOST = "127.0.0.1"

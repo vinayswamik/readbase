@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-readbase = "readbase.cli:main"
+readbase = "src.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["readbase*"]
+include = ["src*"]

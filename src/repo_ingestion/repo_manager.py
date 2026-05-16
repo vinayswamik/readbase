@@ -7,9 +7,9 @@ import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
 
-from readbase.answering.retriever import build_index, delete_index, save_index
-from readbase.repo_ingestion.chunker import chunk_repository
-from readbase.settings import CHROMA_DIR, DATA_DIR, INDEX_DIR, REPOS_DIR
+from src.answering.retriever import build_index, delete_index, save_index
+from src.repo_ingestion.chunker import chunk_repository
+from src.settings import CHROMA_DIR, DATA_DIR, INDEX_DIR, REPOS_DIR
 
 
 # Domain-specific exception: server.py catches this and returns a clean 400 JSON error.

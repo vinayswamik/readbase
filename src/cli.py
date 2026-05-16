@@ -3,15 +3,15 @@ from __future__ import annotations
 import argparse
 from urllib.parse import urlparse
 
-from readbase.answering.answerer import answer_question
-from readbase.answering.retriever import index_exists, load_index, search
-from readbase.repo_ingestion.repo_manager import (
+from src.answering.answerer import answer_question
+from src.answering.retriever import index_exists, load_index, search
+from src.repo_ingestion.repo_manager import (
     RepoError,
     index_local_repo,
     index_repo,
     list_indexes,
 )
-from readbase.settings import DEFAULT_TOP_K
+from src.settings import DEFAULT_TOP_K
 
 
 def main() -> None:

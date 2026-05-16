@@ -10,7 +10,7 @@ import chromadb
 from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
 from chromadb.utils.embedding_functions.onnx_mini_lm_l6_v2 import ONNXMiniLM_L6_V2
 
-from readbase.settings import CHROMA_DIR, DEFAULT_TOP_K, EMBEDDING_CACHE_DIR, INDEX_DIR
+from src.settings import CHROMA_DIR, DEFAULT_TOP_K, EMBEDDING_CACHE_DIR, INDEX_DIR
 
 # Token pattern for code-ish search. It captures identifiers like create_session
 # and numbers, then helper functions split/normalize those tokens further.

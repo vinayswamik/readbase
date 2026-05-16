@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Iterable
 
-from readbase.settings import (
+from src.settings import (
     CHUNK_LINES,
     CHUNK_OVERLAP,
     MAX_FILE_BYTES,

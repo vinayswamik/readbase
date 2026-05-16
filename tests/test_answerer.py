@@ -1,6 +1,6 @@
 import unittest
 
-from readbase.answering.answerer import parse_anthropic_text
+from src.answering.answerer import parse_anthropic_text
 
 
 # Anthropic returns a list of content blocks. The app needs to flatten text
