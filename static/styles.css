@@ -1,0 +1,336 @@
+/* Theme tokens: changing these variables updates the whole UI palette. */
+:root {
+  --bg: #f6f5f1;
+  --surface: #ffffff;
+  --surface-muted: #eeece5;
+  --ink: #202124;
+  --muted: #666a73;
+  --line: #d8d5cc;
+  --accent: #176f5d;
+  --accent-strong: #0f5749;
+  --warning: #8a5a00;
+  --code: #24292f;
+  --shadow: 0 18px 45px rgba(38, 38, 34, 0.08);
+}
+
+/* Border-box makes widths easier: padding/borders stay inside declared width. */
+* {
+  box-sizing: border-box;
+}
+
+/* Let the app shell fill the full viewport height. */
+html,
+body {
+  height: 100%;
+}
+
+/* Base page typography and background. */
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+/* Form controls inherit the same font as the app instead of browser defaults. */
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+/* Shared button styling for primary actions and repo selector buttons. */
+button {
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 700;
+  min-height: 42px;
+  padding: 0 16px;
+}
+
+/* Only active buttons get hover feedback; disabled buttons stay visually muted. */
+button:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+input,
+textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  outline: none;
+}
+
+/* Focus ring makes keyboard and active input states visible. */
+input:focus,
+textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(23, 111, 93, 0.14);
+}
+
+input {
+  min-height: 42px;
+  padding: 0 12px;
+}
+
+textarea {
+  min-height: 56px;
+  max-height: 180px;
+  resize: vertical;
+  padding: 12px;
+}
+
+/* Desktop layout: fixed-width sidebar, flexible chat workspace. */
+.app-shell {
+  display: grid;
+  grid-template-columns: minmax(300px, 360px) 1fr;
+  min-height: 100vh;
+}
+
+/* Left rail containing repo ingestion controls and indexed repo list. */
+.sidebar {
+  border-right: 1px solid var(--line);
+  background: var(--surface-muted);
+  padding: 22px;
+}
+
+/* Brand row includes app name and current answer mode chip. */
+.brand {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: 26px;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.brand p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* Small status pill: retrieval, anthropic, or retrieval_fallback. */
+.status-chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 10px;
+  text-transform: uppercase;
+}
+
+/* Reusable sidebar section with a divider line. */
+.panel {
+  border-top: 1px solid var(--line);
+  padding: 20px 0;
+}
+
+.panel h2 {
+  margin: 0 0 12px;
+  font-size: 14px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+/* Repo indexing form stacks labels, inputs, checkbox, and submit button. */
+.index-form {
+  display: grid;
+  gap: 10px;
+}
+
+.index-form label {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.checkbox-row input {
+  width: 16px;
+  min-height: 16px;
+}
+
+.status-text {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.repo-list {
+  display: grid;
+  gap: 8px;
+}
+
+/* Repo list cards are buttons so they are clickable and keyboard reachable. */
+.repo-item {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  padding: 10px;
+  text-align: left;
+}
+
+/* Selected repo marker. */
+.repo-item.active {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.repo-url {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.repo-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Right side uses rows: scrollable messages above fixed composer. */
+.chat-workspace {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  min-width: 0;
+  background: var(--surface);
+}
+
+/* Message column grows and scrolls independently from the page. */
+.messages {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  padding: 28px;
+}
+
+.message {
+  display: flex;
+}
+
+/* User messages align right; assistant messages use the default left alignment. */
+.message.user {
+  justify-content: flex-end;
+}
+
+/* Bubble body used for both user questions and assistant answers. */
+.message-body {
+  max-width: min(840px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  padding: 14px 16px;
+  white-space: pre-wrap;
+}
+
+.message.user .message-body {
+  border-color: transparent;
+  background: var(--accent);
+  color: #fff;
+  box-shadow: none;
+}
+
+.message.assistant .message-body {
+  background: #fff;
+}
+
+/* Retrieved citations and snippets appended below assistant answers. */
+.sources {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.source {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.source-title {
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+/* In Anthropic mode we show compact citations without the full code block. */
+.source.compact {
+  padding-top: 8px;
+}
+
+/* Full code evidence block shown for retrieval-only or fallback answers. */
+.source pre {
+  max-height: 220px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--code);
+  color: #f7f7f4;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 12px;
+  white-space: pre-wrap;
+}
+
+/* Composer row: textarea plus Ask button. */
+.ask-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-muted);
+  padding: 16px;
+}
+
+/* Mobile layout stacks sidebar above chat so controls stay usable on narrow screens. */
+@media (max-width: 820px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .messages {
+    min-height: 52vh;
+    padding: 18px;
+  }
+
+  .ask-form {
+    grid-template-columns: 1fr;
+  }
+}

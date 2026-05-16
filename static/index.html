@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <!-- Basic browser metadata and the single stylesheet served by server.py. -->
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Readbase</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <!-- Two-column app shell: repository controls on the left, chat on the right. -->
+    <main class="app-shell">
+      <!-- Sidebar owns repo indexing and repo selection. TypeScript finds nodes by id. -->
+      <aside class="sidebar">
+        <header class="brand">
+          <div>
+            <h1>Readbase</h1>
+            <p>Codebase Q&amp;A</p>
+          </div>
+          <span id="llmMode" class="status-chip">retrieval</span>
+        </header>
+
+        <!-- Index form posts a GitHub URL to /api/index through frontend/app.ts. -->
+        <section class="panel">
+          <h2>Repository</h2>
+          <form id="indexForm" class="index-form">
+            <label for="repoUrl">GitHub URL</label>
+            <input
+              id="repoUrl"
+              name="repoUrl"
+              type="url"
+              placeholder="https://github.com/owner/repo"
+              required
+            />
+            <label class="checkbox-row">
+              <input id="refreshRepo" type="checkbox" />
+              <span>Re-clone existing index</span>
+            </label>
+            <button id="indexButton" type="submit">Index repository</button>
+          </form>
+          <div id="repoStatus" class="status-text">No repository indexed in this session.</div>
+        </section>
+
+        <!-- Filled dynamically by GET /api/repos. -->
+        <section class="panel">
+          <h2>Indexed Repos</h2>
+          <div id="repoList" class="repo-list"></div>
+        </section>
+      </aside>
+
+      <!-- Chat workspace: messages grow above a fixed composer form. -->
+      <section class="chat-workspace">
+        <div id="messages" class="messages">
+          <article class="message assistant">
+            <div class="message-body">
+              Paste a GitHub repository URL, index it, then ask a codebase question.
+            </div>
+          </article>
+        </div>
+
+        <!-- Ask form posts selected repo_id + question to /api/ask. -->
+        <form id="askForm" class="ask-form">
+          <textarea
+            id="question"
+            rows="2"
+            placeholder="Ask about architecture, files, functions, data flow, tests..."
+            required
+          ></textarea>
+          <button id="askButton" type="submit" disabled>Ask</button>
+        </form>
+      </section>
+    </main>
+
+    <!-- Compiled output from frontend/app.ts. Edit TypeScript, then rebuild. -->
+    <script src="/static/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "readbase"
+version = "0.2.0"
+description = "Codebase Q&A with local RAG indexing"
+requires-python = ">=3.10"
+dependencies = [
+  "certifi>=2024.8.30",
+  "chromadb>=1.3.0",
+  "fastapi>=0.135.0",
+  "uvicorn>=0.43.0",
+]
+
+[project.scripts]
+readbase = "readbase.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["readbase*"]
