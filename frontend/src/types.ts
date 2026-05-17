@@ -37,3 +37,14 @@ export interface ChatMessage {
   sources?: SourceMatch[];
   mode?: string;
 }
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  name: string;
+}
+
+export interface SessionResponse {
+  authenticated: boolean;
+  user: AuthUser | null;
+}

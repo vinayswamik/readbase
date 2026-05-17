@@ -3,20 +3,24 @@ interface ApiErrorPayload {
   detail?: string | Array<{ msg?: string }>;
 }
 
+const REQUEST_TIMEOUT_MS = 6_000;
+
 export async function postJson<TRequest, TResponse>(
   url: string,
-  body: TRequest,
+  body?: TRequest,
 ): Promise<TResponse> {
-  const response = await fetch(url, {
+  const hasBody = typeof body !== "undefined";
+  const response = await fetchWithTimeout(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    credentials: "include",
+    headers: hasBody ? { "Content-Type": "application/json" } : undefined,
+    body: hasBody ? JSON.stringify(body) : undefined,
   });
   return parseJsonResponse<TResponse>(response);
 }
 
 export async function fetchJson<TResponse>(url: string): Promise<TResponse> {
-  const response = await fetch(url);
+  const response = await fetchWithTimeout(url, { credentials: "include" });
   return parseJsonResponse<TResponse>(response);
 }
 
@@ -37,6 +41,26 @@ async function parseJsonResponse<TResponse>(
   }
 
   return payload;
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => {
+    controller.abort();
+  }, REQUEST_TIMEOUT_MS);
+
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error(
+        "Cannot reach backend right now. Start the server and refresh the page.",
+      );
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 }
 
 function getApiErrorMessage(payload: ApiErrorPayload, status: number): string {
