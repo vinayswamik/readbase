@@ -7,7 +7,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from src.settings import BASE_DIR
+from src.backend.config.settings import BASE_DIR
 
 # Anthropic Messages API settings. Keeping these constants near the top makes
 # provider-specific pieces easy to replace later if we add other models.

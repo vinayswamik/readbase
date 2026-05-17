@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from src.answering.answerer import (
+from src.backend.infrastructure.generation.answerer import (
     MIN_RELEVANCE_SCORE,
     OUT_OF_SCOPE_MESSAGE,
     answer_question,
@@ -52,12 +52,18 @@ class AnswererTests(unittest.TestCase):
                 "text": "unrelated",
             },
         ]
-        with patch("src.answering.answerer.load_llm_settings", return_value=(None, None)):
+        with patch(
+            "src.backend.infrastructure.generation.answerer.load_llm_settings",
+            return_value=(None, None),
+        ):
             result = answer_question("how does login work?", matches)
         self.assertEqual(len(result["sources"]), 1)
         self.assertEqual(result["sources"][0]["path"], "src/auth.py")
 
-    @patch("src.answering.answerer.load_llm_settings", return_value=(None, None))
+    @patch(
+        "src.backend.infrastructure.generation.answerer.load_llm_settings",
+        return_value=(None, None),
+    )
     def test_answer_question_allows_strong_retrieval_without_llm(self, _mock_llm):
         matches = [
             {

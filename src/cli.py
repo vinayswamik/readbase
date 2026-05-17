@@ -3,15 +3,14 @@ from __future__ import annotations
 import argparse
 from urllib.parse import urlparse
 
-from src.answering.answerer import answer_question
-from src.answering.retriever import index_exists, load_index, search
-from src.repo_ingestion.repo_manager import (
-    RepoError,
-    index_local_repo,
-    index_repo,
-    list_indexes,
+from src.backend.application.services.exceptions import ResourceNotFoundError, ValidationError
+from src.backend.application.services.question_service import ask_repository_question
+from src.backend.application.services.repo_service import (
+    index_local_repository,
+    index_repository,
+    list_repositories,
 )
-from src.settings import DEFAULT_TOP_K
+from src.backend.config.settings import DEFAULT_TOP_K
 
 
 def main() -> None:
@@ -41,10 +40,10 @@ def main() -> None:
 def run_index(source: str, refresh: bool) -> None:
     try:
         if is_github_url(source):
-            result = index_repo(source, refresh=refresh)
+            result = index_repository(source, refresh=refresh)
         else:
-            result = index_local_repo(source, refresh=refresh)
-    except RepoError as exc:
+            result = index_local_repository(source, refresh=refresh)
+    except ValidationError as exc:
         raise SystemExit(f"Indexing failed: {exc}") from exc
 
     print("Index complete")
@@ -55,17 +54,13 @@ def run_index(source: str, refresh: bool) -> None:
 
 
 def run_ask_session(repo_id: str | None, top_k: int) -> None:
-    indexes = [repo for repo in list_indexes() if repo.get("repo_id")]
+    indexes = [repo for repo in list_repositories() if repo.get("repo_id")]
     if not indexes:
         raise SystemExit("No indexed repositories found. Run: readbase index <url-or-path>")
 
     chosen_repo_id = repo_id or choose_repo_id(indexes)
     if not chosen_repo_id:
         raise SystemExit("No indexed repositories found. Run: readbase index <url-or-path>")
-    if not index_exists(chosen_repo_id):
-        raise SystemExit(f"Index not found for repo_id: {chosen_repo_id}")
-
-    index = load_index(chosen_repo_id)
     print(f"Using repo_id: {chosen_repo_id}")
     print("Q&A started. Type your question and press Enter. Type 'exit' to quit.")
     while True:
@@ -81,8 +76,17 @@ def run_ask_session(repo_id: str | None, top_k: int) -> None:
             print("Exiting.")
             return
 
-        matches = search(index, question, top_k=max(1, top_k))
-        response = answer_question(question, matches)
+        try:
+            response = ask_repository_question(
+                chosen_repo_id,
+                question,
+                top_k=max(1, top_k),
+            )
+        except ResourceNotFoundError as exc:
+            raise SystemExit(f"Index not found for repo_id: {chosen_repo_id}") from exc
+        except ValidationError as exc:
+            print(f"Question failed: {exc}")
+            continue
         print(f"mode: {response['mode']}")
         print(response["answer"])
         print()

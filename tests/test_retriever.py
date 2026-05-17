@@ -1,6 +1,6 @@
 import unittest
 
-from src.answering.retriever import build_index, delete_index, search
+from src.backend.infrastructure.retrieval.retriever import build_index, delete_index, search
 
 
 # Tests are small examples of desired behavior. This one proves simple word
