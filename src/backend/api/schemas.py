@@ -12,6 +12,7 @@ class IndexRequest(BaseModel):
 
 class IndexedRepoResponse(BaseModel):
     repo_id: str
+    workspace_id: str | None = None
     repo_url: str
     file_count: int
     chunk_count: int
@@ -38,6 +39,7 @@ class SourceMatchResponse(BaseModel):
 
 class AskResponse(BaseModel):
     repo_id: str
+    workspace_id: str | None = None
     question: str
     answer: str
     mode: str
@@ -53,3 +55,17 @@ class AuthUserResponse(BaseModel):
 class SessionResponse(BaseModel):
     authenticated: bool
     user: AuthUserResponse | None = None
+
+
+class CreateWorkspaceRequest(BaseModel):
+    name: str
+
+
+class WorkspaceResponse(BaseModel):
+    workspace_id: str
+    name: str
+    created_at: str
+
+
+class WorkspacesResponse(BaseModel):
+    workspaces: list[WorkspaceResponse]

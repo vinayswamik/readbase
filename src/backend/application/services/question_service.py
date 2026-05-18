@@ -10,6 +10,7 @@ def ask_repository_question(
     repo_id: str,
     question: str,
     top_k: int = DEFAULT_TOP_K,
+    workspace_id: str | None = None,
 ) -> dict:
     normalized_repo_id = repo_id.strip()
     normalized_question = question.strip()
@@ -18,14 +19,15 @@ def ask_repository_question(
         raise ValidationError("repo_id is required.")
     if not normalized_question:
         raise ValidationError("question is required.")
-    if not index_exists(normalized_repo_id):
+    if not index_exists(normalized_repo_id, workspace_id=workspace_id):
         raise ResourceNotFoundError("Repository is not indexed yet.")
 
-    index = load_index(normalized_repo_id)
+    index = load_index(normalized_repo_id, workspace_id=workspace_id)
     matches = search(index, normalized_question, top_k=max(1, top_k))
     answer = answer_question(normalized_question, matches)
     return {
         "repo_id": normalized_repo_id,
+        "workspace_id": workspace_id,
         "question": normalized_question,
         "answer": answer["answer"],
         "mode": answer["mode"],

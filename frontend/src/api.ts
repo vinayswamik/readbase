@@ -24,6 +24,14 @@ export async function fetchJson<TResponse>(url: string): Promise<TResponse> {
   return parseJsonResponse<TResponse>(response);
 }
 
+export async function deleteJson<TResponse>(url: string): Promise<TResponse> {
+  const response = await fetchWithTimeout(url, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  return parseJsonResponse<TResponse>(response);
+}
+
 export function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;

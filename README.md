@@ -11,6 +11,7 @@ Readbase is a small codebase Q&A prototype. Paste a GitHub repository URL, let t
 - ChromaDB-backed local retrieval stored in `.readbase/chroma`
 - Optional LLM synthesis via `ANTHROPIC_API_KEY` and `ANTHROPIC_MODEL`
 - React + TypeScript browser UI for indexing a repo and asking questions
+- Workspace dashboard with per-workspace repository indexes
 - Clear UI -> API routes -> backend services -> storage/provider boundaries
 
 ## Architecture
@@ -30,6 +31,7 @@ src/backend/application/services/*
 Storage and provider logic
 src/backend/infrastructure/*
 .readbase/ or READBASE_DATA_DIR
+  workspaces/
 Anthropic API
 ```
 
@@ -80,13 +82,21 @@ Then open `http://127.0.0.1:8000`.
 
 ## CLI
 
-1) Index a repository from GitHub URL or local path:
+1) Create a workspace:
+
+```bash
+readbase create "My Workspace"
+```
+
+This also makes the workspace active for later CLI commands.
+
+2) Index a repository from GitHub URL or local path into the active workspace:
 
 ```bash
 readbase index "<github-url / local-path>"
 ```
 
-2) Start CLI Q&A:
+3) Start CLI Q&A in the active workspace:
 
 ```bash
 readbase ask
@@ -95,6 +105,8 @@ readbase ask
 - `readbase ask` shows available indexes, asks you to choose one by number, then opens a question loop.
 - Exit Q&A with `exit` or `quit`.
 - Optional: `readbase ask --repo-id <repo_id>`.
+- Optional: use `--workspace <name-or-id>` with `readbase index` or `readbase ask`.
+- Delete a workspace with a warning prompt: `readbase space "My Workspace" -del`.
 
 ## Test
 
