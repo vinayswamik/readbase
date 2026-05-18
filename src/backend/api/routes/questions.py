@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from src.backend.api.auth import require_authenticated_user
 from src.backend.api.errors import service_error_to_http
 from src.backend.api.schemas import AskRequest, AskResponse
 from src.backend.application.services.exceptions import ServiceError
@@ -11,7 +12,7 @@ router = APIRouter(tags=["questions"])
 
 
 @router.post("/ask", response_model=AskResponse)
-def ask_endpoint(payload: AskRequest) -> dict:
+def ask_endpoint(payload: AskRequest, _user=Depends(require_authenticated_user)) -> dict:
     try:
         return ask_repository_question(
             repo_id=payload.repo_id,

@@ -42,3 +42,14 @@ class AskResponse(BaseModel):
     answer: str
     mode: str
     sources: list[SourceMatchResponse]
+
+
+class AuthUserResponse(BaseModel):
+    id: str
+    email: str
+    name: str
+
+
+class SessionResponse(BaseModel):
+    authenticated: bool
+    user: AuthUserResponse | None = None
