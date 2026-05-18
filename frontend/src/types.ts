@@ -2,6 +2,7 @@ export type MessageRole = "user" | "assistant";
 
 export interface IndexedRepo {
   repo_id: string;
+  workspace_id?: string | null;
   repo_url: string;
   file_count: number;
   chunk_count: number;
@@ -24,6 +25,7 @@ export interface SourceMatch {
 
 export interface AskResponse {
   repo_id: string;
+  workspace_id?: string | null;
   question: string;
   answer: string;
   mode: string;
@@ -47,4 +49,14 @@ export interface AuthUser {
 export interface SessionResponse {
   authenticated: boolean;
   user: AuthUser | null;
+}
+
+export interface Workspace {
+  workspace_id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface WorkspacesResponse {
+  workspaces: Workspace[];
 }

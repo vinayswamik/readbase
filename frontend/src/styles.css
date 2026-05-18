@@ -156,6 +156,134 @@ button {
   font-size: 14px;
 }
 
+.workspace-home {
+  width: min(100%, 980px);
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+.workspace-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.workspace-header h1 {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.15;
+}
+
+.workspace-header p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.workspace-create-form {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--panel-shadow);
+  padding: 18px;
+}
+
+.workspace-create-form label {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.workspace-create-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+}
+
+.workspace-create-row input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  outline: none;
+  padding: 0 12px;
+}
+
+.workspace-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.workspace-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 10px;
+}
+
+.workspace-open {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 8px;
+  text-align: left;
+}
+
+.workspace-open:hover .workspace-name {
+  color: var(--button);
+}
+
+.workspace-name {
+  overflow-wrap: anywhere;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.workspace-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.danger-button {
+  min-height: 38px;
+  border: 1px solid #fecdca;
+  border-radius: 8px;
+  background: #fff5f4;
+  color: #b42318;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 0 12px;
+}
+
+.danger-button:hover:not(:disabled) {
+  background: #fee4e2;
+}
+
+.danger-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.error-text {
+  color: #b42318;
+}
+
 .account-menu {
   position: relative;
 }
@@ -250,6 +378,23 @@ button {
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 22px;
+}
+
+.back-button {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  margin-bottom: 16px;
+  padding: 0 10px;
+}
+
+.back-button:hover {
+  color: var(--ink);
 }
 
 .brand h1 {
@@ -497,6 +642,15 @@ button {
   .home-topbar {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .workspace-home {
+    padding: 24px 16px;
+  }
+
+  .workspace-create-row,
+  .workspace-item {
+    grid-template-columns: 1fr;
   }
 
   .app-shell {

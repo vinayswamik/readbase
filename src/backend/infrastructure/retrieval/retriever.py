@@ -15,6 +15,7 @@ from src.backend.config.settings import (
     DEFAULT_TOP_K,
     EMBEDDING_CACHE_DIR,
     INDEX_DIR,
+    WORKSPACES_DIR,
 )
 
 # Token pattern for code-ish search. It captures identifiers like create_session
@@ -63,14 +64,21 @@ def split_identifier(token: str) -> list[str]:
 
 # Build a persistent ChromaDB index from repo chunks. Chroma's embedding function
 # turns code text into semantic vectors; we still store raw text for citations.
-def build_index(chunks: list[dict], repo_url: str, repo_id: str, file_count: int) -> dict:
-    collection = get_repo_collection(repo_id, recreate=True)
+def build_index(
+    chunks: list[dict],
+    repo_url: str,
+    repo_id: str,
+    file_count: int,
+    workspace_id: str | None = None,
+) -> dict:
+    collection = get_repo_collection(repo_id, workspace_id=workspace_id, recreate=True)
     if chunks:
         ids = [chunk["id"] for chunk in chunks]
         documents = [chunk["text"] for chunk in chunks]
         metadatas = [
             {
                 "repo_id": repo_id,
+                "workspace_id": workspace_id or "",
                 "repo_url": repo_url,
                 "path": chunk["path"],
                 "start_line": int(chunk["start_line"]),
@@ -90,10 +98,11 @@ def build_index(chunks: list[dict], repo_url: str, repo_id: str, file_count: int
     # The JSON manifest is now only lightweight metadata. Chunks live in Chroma.
     return {
         "repo_id": repo_id,
+        "workspace_id": workspace_id,
         "repo_url": repo_url,
         "file_count": file_count,
         "chunk_count": len(chunks),
-        "collection": collection_name(repo_id),
+        "collection": collection_name(repo_id, workspace_id=workspace_id),
         "embedding": "chroma_default",
     }
 
@@ -105,20 +114,24 @@ def save_index(index: dict, path: Path) -> None:
 
 
 # Check whether the manifest exists before trying to query Chroma.
-def index_exists(repo_id: str) -> bool:
-    return (INDEX_DIR / f"{repo_id}.json").exists()
+def index_exists(repo_id: str, workspace_id: str | None = None) -> bool:
+    return (index_dir_for_workspace(workspace_id) / f"{repo_id}.json").exists()
 
 
 # Load a previously saved repo manifest when the user asks a question.
-def load_index(repo_id: str) -> dict:
-    return json.loads((INDEX_DIR / f"{repo_id}.json").read_text(encoding="utf-8"))
+def load_index(repo_id: str, workspace_id: str | None = None) -> dict:
+    return json.loads(
+        (index_dir_for_workspace(workspace_id) / f"{repo_id}.json").read_text(
+            encoding="utf-8"
+        )
+    )
 
 
 # Delete the Chroma collection for a repo. Refresh uses this so old chunks do not
 # survive when a repository is re-cloned and re-indexed.
-def delete_index(repo_id: str) -> None:
+def delete_index(repo_id: str, workspace_id: str | None = None) -> None:
     try:
-        get_chroma_client().delete_collection(collection_name(repo_id))
+        get_chroma_client().delete_collection(collection_name(repo_id, workspace_id=workspace_id))
     except Exception:
         # Chroma raises when the collection does not exist; refresh should remain idempotent.
         return
@@ -130,7 +143,10 @@ def search(index: dict, question: str, top_k: int = DEFAULT_TOP_K) -> list[dict]
     if not tokenize(question):
         return []
 
-    collection = get_repo_collection(index["repo_id"])
+    collection = get_repo_collection(
+        index["repo_id"],
+        workspace_id=index.get("workspace_id"),
+    )
     result = collection.query(
         query_embeddings=embed_texts([question]),
         n_results=max(1, top_k),
@@ -147,15 +163,20 @@ def get_chroma_client() -> chromadb.PersistentClient:
 
 # Collection names are separate from repo ids because Chroma collection names
 # have validation rules. A digest keeps names short and collision-resistant.
-def collection_name(repo_id: str) -> str:
-    digest = hashlib.sha1(repo_id.encode("utf-8")).hexdigest()[:16]
+def collection_name(repo_id: str, workspace_id: str | None = None) -> str:
+    collection_key = f"{workspace_id}:{repo_id}" if workspace_id else repo_id
+    digest = hashlib.sha1(collection_key.encode("utf-8")).hexdigest()[:16]
     return f"readbase_{digest}"
 
 
 # Get or recreate the Chroma collection for one repo.
-def get_repo_collection(repo_id: str, recreate: bool = False):
+def get_repo_collection(
+    repo_id: str,
+    workspace_id: str | None = None,
+    recreate: bool = False,
+):
     client = get_chroma_client()
-    name = collection_name(repo_id)
+    name = collection_name(repo_id, workspace_id=workspace_id)
     if recreate:
         try:
             client.delete_collection(name)
@@ -163,8 +184,20 @@ def get_repo_collection(repo_id: str, recreate: bool = False):
             pass
     return client.get_or_create_collection(
         name=name,
-        metadata={"repo_id": repo_id, "hnsw:space": "cosine"},
+        metadata={
+            "repo_id": repo_id,
+            "workspace_id": workspace_id or "",
+            "hnsw:space": "cosine",
+        },
     )
+
+
+def index_dir_for_workspace(workspace_id: str | None = None) -> Path:
+    if not workspace_id:
+        return INDEX_DIR
+    index_dir = WORKSPACES_DIR / workspace_id / "indexes"
+    index_dir.mkdir(parents=True, exist_ok=True)
+    return index_dir
 
 
 # Include file path in the text that gets embedded because paths encode useful

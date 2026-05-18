@@ -34,6 +34,9 @@ REPOS_DIR = DATA_DIR / "repos"
 INDEX_DIR = DATA_DIR / "indexes"
 CHROMA_DIR = DATA_DIR / "chroma"
 EMBEDDING_CACHE_DIR = DATA_DIR / "chroma-models"
+WORKSPACES_DIR = DATA_DIR / "workspaces"
+WORKSPACES_MANIFEST = DATA_DIR / "workspaces.json"
+CLI_STATE_FILE = DATA_DIR / "cli-state.json"
 
 # Chunking controls. A "chunk" is the small code/documentation slice we send
 # into retrieval and optionally to Claude. Overlap keeps context across chunk

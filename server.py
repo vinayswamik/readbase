@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import os
+import signal
+import subprocess
+import time
 from pathlib import Path
 
 import uvicorn
@@ -44,8 +48,52 @@ def frontend_root() -> Response:
 app = create_app()
 
 
+def release_port(port: int) -> None:
+    """Stop any process already listening on `port` (typical stale server)."""
+    if os.environ.get("READBASE_SKIP_PORT_FREE"):
+        return
+    try:
+        out = subprocess.check_output(
+            ["lsof", "-ti", f"TCP:{port}", "-sTCP:LISTEN"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return
+    my_pid = os.getpid()
+    pids: list[int] = []
+    for line in out.splitlines():
+        pid = int(line.strip())
+        if pid != my_pid:
+            pids.append(pid)
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    time.sleep(0.3)
+    try:
+        still = subprocess.check_output(
+            ["lsof", "-ti", f"TCP:{port}", "-sTCP:LISTEN"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except subprocess.CalledProcessError:
+        return
+    for line in still.splitlines():
+        pid = int(line.strip())
+        if pid == my_pid:
+            continue
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    time.sleep(0.1)
+
+
 # CLI entry: `python server.py` starts uvicorn, the ASGI server FastAPI runs on.
 def main() -> None:
+    release_port(PORT)
     print(f"Readbase running at http://{HOST}:{PORT}")
     uvicorn.run(app, host=HOST, port=PORT)
 
