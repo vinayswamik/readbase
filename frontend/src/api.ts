@@ -39,6 +39,14 @@ export function getErrorMessage(error: unknown): string {
   return "Unexpected error.";
 }
 
+export function isSessionExpiredMessage(message: string): boolean {
+  const normalizedMessage = message.toLowerCase();
+  return (
+    normalizedMessage.includes("session expired") ||
+    normalizedMessage.includes("authentication required")
+  );
+}
+
 async function parseJsonResponse<TResponse>(
   response: Response,
 ): Promise<TResponse> {

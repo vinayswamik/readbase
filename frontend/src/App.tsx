@@ -84,9 +84,9 @@ export function App() {
     }
   }
 
-  async function handleGoogleLogin() {
+  async function handleGoogleLogin(portal: "admin" | "member") {
     setIsSubmitting(true);
-    window.location.assign("/api/auth/google/start");
+    window.location.assign(`/api/auth/google/start?portal=${portal}`);
   }
 
   async function handleLogout() {
@@ -133,5 +133,8 @@ function readAuthErrorFromUrl(): string | null {
   }
   url.searchParams.delete("auth_error");
   window.history.replaceState({}, "", url.pathname + url.search);
+  if (authError === "admin_not_approved") {
+    return "This Google account is not approved for admin login.";
+  }
   return "Google sign-in was not completed. Please try again.";
 }

@@ -115,6 +115,16 @@ button {
   background: var(--button-hover);
 }
 
+.muted-button {
+  border-color: var(--line);
+  background: #fff;
+  color: var(--ink);
+}
+
+.muted-button:hover {
+  background: #f8fafc;
+}
+
 .secondary-button:disabled {
   cursor: not-allowed;
   opacity: 0.6;
@@ -224,7 +234,7 @@ button {
 .workspace-item {
   display: grid;
   grid-template-columns: 1fr auto;
-  align-items: center;
+  align-items: start;
   gap: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -278,6 +288,78 @@ button {
 .danger-button:disabled {
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+.workspace-actions {
+  display: grid;
+  gap: 8px;
+  min-width: 260px;
+}
+
+.secondary-action-button {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 0 12px;
+}
+
+.secondary-action-button:hover {
+  background: #f8fafc;
+}
+
+.member-manager {
+  display: grid;
+  gap: 8px;
+}
+
+.member-panel {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 10px;
+}
+
+.member-add-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.member-add-form input {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  outline: none;
+  padding: 0 10px;
+}
+
+.member-list {
+  display: grid;
+  gap: 8px;
+}
+
+.member-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.member-row span:first-child {
+  overflow-wrap: anywhere;
 }
 
 .error-text {
@@ -649,8 +731,13 @@ button {
   }
 
   .workspace-create-row,
-  .workspace-item {
+  .workspace-item,
+  .member-add-form {
     grid-template-columns: 1fr;
+  }
+
+  .workspace-actions {
+    min-width: 0;
   }
 
   .app-shell {

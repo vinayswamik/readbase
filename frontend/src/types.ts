@@ -44,6 +44,7 @@ export interface AuthUser {
   id: string;
   email: string;
   name: string;
+  role: "admin" | "member";
 }
 
 export interface SessionResponse {
@@ -53,10 +54,23 @@ export interface SessionResponse {
 
 export interface Workspace {
   workspace_id: string;
+  owner_user_id: string;
   name: string;
   created_at: string;
+  can_manage: boolean;
 }
 
 export interface WorkspacesResponse {
   workspaces: Workspace[];
+}
+
+export interface WorkspaceMember {
+  email: string;
+  user_id?: string | null;
+  added_at: string;
+  is_owner: boolean;
+}
+
+export interface WorkspaceMembersResponse {
+  members: WorkspaceMember[];
 }

@@ -11,6 +11,7 @@ Readbase is a small codebase Q&A prototype. Paste a GitHub repository URL, let t
 - ChromaDB-backed local retrieval stored in `.readbase/chroma`
 - Optional LLM synthesis via `ANTHROPIC_API_KEY` and `ANTHROPIC_MODEL`
 - React + TypeScript browser UI for indexing a repo and asking questions
+- Admin/member login with database-backed workspace membership
 - Workspace dashboard with per-workspace repository indexes
 - Clear UI -> API routes -> backend services -> storage/provider boundaries
 
@@ -32,6 +33,7 @@ Storage and provider logic
 src/backend/infrastructure/*
 .readbase/ or READBASE_DATA_DIR
   workspaces/
+PostgreSQL / DATABASE_URL
 Anthropic API
 ```
 
@@ -108,6 +110,28 @@ readbase ask
 - Optional: use `--workspace <name-or-id>` with `readbase index` or `readbase ask`.
 - Delete a workspace with a warning prompt: `readbase space "My Workspace" -del`.
 
+## Admin and Member Login
+
+The browser app has separate Admin Login and Member Login buttons. Both use Google OAuth.
+
+- Admin Login succeeds only when the Google account email is approved in the database.
+- Bootstrap approved admins with `READBASE_BOOTSTRAP_ADMIN_EMAILS`.
+- Member Login always creates a member session, even for an approved admin email.
+- Workspace creator admins can add members by email from the workspace dashboard.
+
+Create a PostgreSQL database and set:
+
+```bash
+DATABASE_URL=postgresql+psycopg://readbase:readbase@127.0.0.1:5432/readbase
+READBASE_BOOTSTRAP_ADMIN_EMAILS=you@example.com
+```
+
+Run migrations with:
+
+```bash
+alembic upgrade head
+```
+
 ## Test
 
 ```bash
@@ -133,6 +157,8 @@ Create a `.env` file:
 ANTHROPIC_API_KEY=your_api_key
 ANTHROPIC_MODEL=your_model_name
 READBASE_DATA_DIR=.readbase
+DATABASE_URL=postgresql+psycopg://readbase:readbase@127.0.0.1:5432/readbase
+READBASE_BOOTSTRAP_ADMIN_EMAILS=you@example.com
 ```
 
 If either Anthropic value is missing, the app still works in retrieval-only mode and returns the most relevant snippets with citations.

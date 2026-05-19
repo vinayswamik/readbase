@@ -11,3 +11,7 @@ class ValidationError(ServiceError):
 
 class ResourceNotFoundError(ServiceError):
     """Raised when a requested local resource does not exist."""
+
+
+class PermissionDeniedError(ServiceError):
+    """Raised when an authenticated caller is not allowed to do something."""

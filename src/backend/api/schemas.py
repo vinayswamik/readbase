@@ -50,6 +50,7 @@ class AuthUserResponse(BaseModel):
     id: str
     email: str
     name: str
+    role: str
 
 
 class SessionResponse(BaseModel):
@@ -61,10 +62,27 @@ class CreateWorkspaceRequest(BaseModel):
     name: str
 
 
+class AddWorkspaceMemberRequest(BaseModel):
+    email: str
+
+
+class WorkspaceMemberResponse(BaseModel):
+    email: str
+    user_id: str | None = None
+    added_at: str
+    is_owner: bool
+
+
+class WorkspaceMembersResponse(BaseModel):
+    members: list[WorkspaceMemberResponse]
+
+
 class WorkspaceResponse(BaseModel):
     workspace_id: str
+    owner_user_id: str
     name: str
     created_at: str
+    can_manage: bool
 
 
 class WorkspacesResponse(BaseModel):

@@ -19,9 +19,11 @@ from src.backend.application.services.workspace_service import (
     set_active_workspace_id,
 )
 from src.backend.config.settings import DEFAULT_TOP_K
+from src.backend.infrastructure.database import init_database
 
 
 def main() -> None:
+    init_database()
     parser = argparse.ArgumentParser(prog="readbase", description="Readbase CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
