@@ -16,9 +16,16 @@ from dataclasses import dataclass
 from secrets import token_urlsafe
 
 import certifi
+from sqlalchemy import select
 
-from src.backend.config.settings import load_env_file, BASE_DIR
+from src.backend.config.settings import (
+    BASE_DIR,
+    READBASE_BOOTSTRAP_ADMIN_EMAILS,
+    load_env_file,
+)
 from src.backend.application.services.exceptions import ValidationError
+from src.backend.infrastructure.database import session_scope
+from src.backend.infrastructure.models import AdminApproval, User, WorkspaceMember
 
 load_env_file(BASE_DIR / ".env")
 
@@ -59,13 +66,22 @@ class AuthUser:
     user_id: str
     email: str
     name: str
+    role: str
 
     def to_dict(self) -> dict[str, str]:
         return {
             "id": self.user_id,
             "email": self.email,
             "name": self.name,
+            "role": self.role,
         }
+
+
+@dataclass(frozen=True)
+class GoogleIdentity:
+    user_id: str
+    email: str
+    name: str
 
 
 @dataclass(frozen=True)
@@ -102,7 +118,7 @@ def build_google_authorize_url(state: str) -> str:
     return f"https://accounts.google.com/o/oauth2/v2/auth?{urllib.parse.urlencode(params)}"
 
 
-def exchange_google_code_for_user(code: str) -> AuthUser:
+def exchange_google_code_for_identity(code: str) -> GoogleIdentity:
     _validate_google_oauth_config()
     token_payload = _exchange_code_for_tokens(code)
     id_token = token_payload.get("id_token")
@@ -110,11 +126,108 @@ def exchange_google_code_for_user(code: str) -> AuthUser:
         raise ValidationError("Google login failed. Missing ID token.")
 
     claims = _verify_google_id_token(id_token)
-    return AuthUser(
+    return GoogleIdentity(
         user_id=_required_str(claims, "sub"),
         email=_required_str(claims, "email"),
         name=claims.get("name") if isinstance(claims.get("name"), str) else "Google User",
     )
+
+
+def exchange_google_code_for_user(code: str) -> AuthUser:
+    identity = exchange_google_code_for_identity(code)
+    return upsert_authenticated_user(identity, role="member")
+
+
+def upsert_authenticated_user(identity: GoogleIdentity, role: str) -> AuthUser:
+    normalized_role = normalize_login_role(role)
+    email_key = normalize_email_key(identity.email)
+    with session_scope() as session:
+        user = session.get(User, identity.user_id)
+        existing_for_email = session.scalar(select(User).where(User.email_key == email_key))
+        if user is None and existing_for_email is not None:
+            user = existing_for_email
+            user.user_id = identity.user_id
+        if user is None:
+            user = User(
+                user_id=identity.user_id,
+                email=identity.email,
+                email_key=email_key,
+                name=identity.name,
+            )
+            session.add(user)
+        else:
+            user.email = identity.email
+            user.email_key = email_key
+            user.name = identity.name
+
+        for membership in session.scalars(
+            select(WorkspaceMember).where(WorkspaceMember.member_email_key == email_key)
+        ):
+            membership.user_id = identity.user_id
+
+    return AuthUser(
+        user_id=identity.user_id,
+        email=identity.email,
+        name=identity.name,
+        role=normalized_role,
+    )
+
+
+def is_admin_approved(email: str) -> bool:
+    email_key = normalize_email_key(email)
+    with session_scope() as session:
+        approval = session.scalar(
+            select(AdminApproval).where(
+                AdminApproval.email_key == email_key,
+                AdminApproval.active.is_(True),
+            )
+        )
+        return approval is not None
+
+
+def seed_bootstrap_admins() -> None:
+    emails = [
+        item.strip()
+        for item in READBASE_BOOTSTRAP_ADMIN_EMAILS.replace(";", ",").split(",")
+        if item.strip()
+    ]
+    if not emails:
+        return
+
+    with session_scope() as session:
+        for email in emails:
+            email_key = normalize_email_key(email)
+            approval = session.scalar(
+                select(AdminApproval).where(AdminApproval.email_key == email_key)
+            )
+            if approval is None:
+                session.add(AdminApproval(email=email.strip(), email_key=email_key, active=True))
+            else:
+                approval.email = email.strip()
+                approval.active = True
+
+
+def normalize_login_role(role: str) -> str:
+    normalized_role = role.strip().lower()
+    if normalized_role not in {"admin", "member"}:
+        raise ValidationError("Login role is invalid.")
+    return normalized_role
+
+
+def normalize_login_portal(portal: str) -> str:
+    normalized_portal = portal.strip().lower()
+    if normalized_portal not in {"admin", "member"}:
+        raise ValidationError("Login portal is invalid.")
+    return normalized_portal
+
+
+def normalize_email_key(email: str) -> str:
+    normalized = email.strip().casefold()
+    if not normalized or "@" not in normalized:
+        raise ValidationError("Email address is required.")
+    if len(normalized) > 320:
+        raise ValidationError("Email address is too long.")
+    return normalized
 
 
 def create_access_token(user: AuthUser) -> str:
@@ -132,6 +245,7 @@ def _create_signed_token(user: AuthUser, ttl_seconds: int, token_type: str) -> s
         "sub": user.user_id,
         "email": user.email,
         "name": user.name,
+        "role": user.role,
         "iat": issued_at,
         "exp": issued_at + ttl_seconds,
     }
@@ -173,11 +287,14 @@ def _parse_session(token: str, expected_type: str) -> AuthSession | None:
     user_id = payload.get("sub")
     email = payload.get("email")
     name = payload.get("name")
+    role = payload.get("role", "member")
     if not isinstance(user_id, str) or not isinstance(email, str) or not isinstance(name, str):
+        return None
+    if not isinstance(role, str) or role not in {"admin", "member"}:
         return None
 
     return AuthSession(
-        user=AuthUser(user_id=user_id, email=email, name=name),
+        user=AuthUser(user_id=user_id, email=email, name=name, role=role),
         expires_at=expires_at,
     )
 

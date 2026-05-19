@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { fetchJson, getErrorMessage, postJson } from "../api";
+import { fetchJson, getErrorMessage, isSessionExpiredMessage, postJson } from "../api";
 import type {
   AskResponse,
   ChatMessage,
@@ -44,10 +44,7 @@ export function WorkspaceChatPage({
       if (setMessage) {
         setMessage(message);
       }
-      if (
-        message.toLowerCase().includes("session expired") ||
-        message.toLowerCase().includes("authentication required")
-      ) {
+      if (isSessionExpiredMessage(message)) {
         onSessionExpired();
       }
     },

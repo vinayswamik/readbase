@@ -94,6 +94,7 @@ export function HomePage({
         />
       ) : (
         <WorkspaceDashboardPage
+          user={user}
           onSelectWorkspace={setSelectedWorkspace}
           onSessionExpired={onSessionExpired}
         />

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import Cookie, HTTPException, Response
+from fastapi import Cookie, Depends, HTTPException, Response
 
 from src.backend.application.services.auth_service import (
     ACCESS_TOKEN_TTL_SECONDS,
@@ -11,6 +11,15 @@ from src.backend.application.services.auth_service import (
     create_refresh_token,
     parse_access_session,
     parse_refresh_session,
+)
+from src.backend.application.services.exceptions import (
+    PermissionDeniedError,
+    ResourceNotFoundError,
+    ValidationError,
+)
+from src.backend.application.services.workspace_service import (
+    get_workspace,
+    get_owned_workspace,
 )
 
 ACCESS_COOKIE_NAME = "readbase_access_token"
@@ -37,6 +46,41 @@ def require_authenticated_user(
 
     clear_auth_cookies(response)
     raise HTTPException(status_code=401, detail="Session expired. Sign in again.")
+
+
+def require_admin_user(user: AuthUser = Depends(require_authenticated_user)):
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    return user
+
+
+def require_workspace_access(
+    workspace_id: str,
+    user: AuthUser = Depends(require_authenticated_user),
+):
+    try:
+        return get_workspace(
+            user.user_id,
+            workspace_id,
+            user_email=user.email,
+            user_role=user.role,
+        )
+    except (ResourceNotFoundError, ValidationError) as exc:
+        raise HTTPException(status_code=403, detail="Workspace access required.") from exc
+
+
+def require_workspace_owner(
+    workspace_id: str,
+    user: AuthUser = Depends(require_authenticated_user),
+):
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    try:
+        return get_owned_workspace(user.user_id, workspace_id)
+    except ResourceNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Workspace not found.") from exc
+    except PermissionDeniedError as exc:
+        raise HTTPException(status_code=403, detail="Workspace owner access required.") from exc
 
 
 def set_access_cookie(response: Response, user: AuthUser) -> None:
