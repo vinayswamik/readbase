@@ -87,3 +87,65 @@ class WorkspaceResponse(BaseModel):
 
 class WorkspacesResponse(BaseModel):
     workspaces: list[WorkspaceResponse]
+
+
+class HierarchyNodeResponse(BaseModel):
+    node_id: str
+    workspace_id: str
+    display_name: str
+    assigned_user_id: str
+    assigned_user_email: str | None = None
+    assigned_user_name: str | None = None
+    x: float
+    y: float
+    created_by_user_id: str
+    created_at: str
+    updated_at: str
+
+
+class HierarchyConnectionResponse(BaseModel):
+    connection_id: str
+    workspace_id: str
+    parent_node_id: str
+    child_node_id: str
+    created_by_user_id: str
+    created_at: str
+
+
+class HierarchyAssignableUserResponse(BaseModel):
+    user_id: str
+    email: str
+    name: str
+    is_owner: bool
+
+
+class HierarchyGraphResponse(BaseModel):
+    nodes: list[HierarchyNodeResponse]
+    connections: list[HierarchyConnectionResponse]
+    assignable_users: list[HierarchyAssignableUserResponse] = []
+
+
+class CreateHierarchyNodeRequest(BaseModel):
+    display_name: str
+    assigned_user_id: str
+    x: float = 0
+    y: float = 0
+    parent_node_id: str | None = None
+
+
+class CreateHierarchyNodeResponse(BaseModel):
+    node: HierarchyNodeResponse
+    connection: HierarchyConnectionResponse | None = None
+
+
+class UpdateHierarchyNodeRequest(BaseModel):
+    display_name: str | None = None
+    assigned_user_id: str | None = None
+    parent_node_id: str | None = None
+    x: float | None = None
+    y: float | None = None
+
+
+class CreateHierarchyConnectionRequest(BaseModel):
+    parent_node_id: str
+    child_node_id: str

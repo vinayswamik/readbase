@@ -19,6 +19,19 @@ export async function postJson<TRequest, TResponse>(
   return parseJsonResponse<TResponse>(response);
 }
 
+export async function patchJson<TRequest, TResponse>(
+  url: string,
+  body: TRequest,
+): Promise<TResponse> {
+  const response = await fetchWithTimeout(url, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return parseJsonResponse<TResponse>(response);
+}
+
 export async function fetchJson<TResponse>(url: string): Promise<TResponse> {
   const response = await fetchWithTimeout(url, { credentials: "include" });
   return parseJsonResponse<TResponse>(response);
