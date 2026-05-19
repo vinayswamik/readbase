@@ -4,6 +4,8 @@ import type { AuthUser, Workspace } from "../types";
 import { WorkspaceChatPage } from "./WorkspaceChatPage";
 import { WorkspaceDashboardPage } from "./WorkspaceDashboardPage";
 
+const SELECTED_WORKSPACE_STORAGE_KEY = "readbase:selectedWorkspace";
+
 export function HomePage({
   user,
   loading,
@@ -15,9 +17,23 @@ export function HomePage({
   onLogout: () => void;
   onSessionExpired: () => void;
 }) {
-  const [selectedWorkspace, setSelectedWorkspace] = useState<Workspace | null>(null);
+  const [selectedWorkspace, setSelectedWorkspaceState] = useState<Workspace | null>(() =>
+    readStoredWorkspace(),
+  );
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
+
+  function setSelectedWorkspace(workspace: Workspace | null) {
+    setSelectedWorkspaceState(workspace);
+    if (workspace) {
+      window.sessionStorage.setItem(
+        SELECTED_WORKSPACE_STORAGE_KEY,
+        JSON.stringify(workspace),
+      );
+    } else {
+      window.sessionStorage.removeItem(SELECTED_WORKSPACE_STORAGE_KEY);
+    }
+  }
 
   useEffect(() => {
     if (!accountMenuOpen) {
@@ -88,6 +104,7 @@ export function HomePage({
       {selectedWorkspace ? (
         <WorkspaceChatPage
           key={selectedWorkspace.workspace_id}
+          user={user}
           workspace={selectedWorkspace}
           onBack={() => setSelectedWorkspace(null)}
           onSessionExpired={onSessionExpired}
@@ -101,4 +118,26 @@ export function HomePage({
       )}
     </main>
   );
+}
+
+function readStoredWorkspace(): Workspace | null {
+  try {
+    const storedWorkspace = window.sessionStorage.getItem(SELECTED_WORKSPACE_STORAGE_KEY);
+    if (!storedWorkspace) {
+      return null;
+    }
+    const parsed = JSON.parse(storedWorkspace) as Partial<Workspace>;
+    if (
+      typeof parsed.workspace_id === "string" &&
+      typeof parsed.owner_user_id === "string" &&
+      typeof parsed.name === "string" &&
+      typeof parsed.created_at === "string" &&
+      typeof parsed.can_manage === "boolean"
+    ) {
+      return parsed as Workspace;
+    }
+  } catch {
+    window.sessionStorage.removeItem(SELECTED_WORKSPACE_STORAGE_KEY);
+  }
+  return null;
 }

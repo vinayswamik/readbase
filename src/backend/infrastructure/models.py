@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.backend.infrastructure.database import Base
@@ -75,3 +75,60 @@ class WorkspaceMember(Base):
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     workspace: Mapped[Workspace] = relationship("Workspace", back_populates="members")
+
+
+class HierarchyNode(Base):
+    __tablename__ = "hierarchy_nodes"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "assigned_user_id", name="uq_hierarchy_node_assigned_user"),
+    )
+
+    node_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String(96),
+        ForeignKey("workspaces.workspace_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    display_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    assigned_user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.user_id"), nullable=False, index=True)
+    x: Mapped[float] = mapped_column(Float, default=0, nullable=False)
+    y: Mapped[float] = mapped_column(Float, default=0, nullable=False)
+    created_by_user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.user_id"), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
+
+
+class HierarchyConnection(Base):
+    __tablename__ = "hierarchy_connections"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "parent_node_id", "child_node_id", name="uq_hierarchy_connection"),
+        UniqueConstraint("workspace_id", "child_node_id", name="uq_hierarchy_child_parent"),
+    )
+
+    connection_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String(96),
+        ForeignKey("workspaces.workspace_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    parent_node_id: Mapped[str] = mapped_column(
+        String(96),
+        ForeignKey("hierarchy_nodes.node_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    child_node_id: Mapped[str] = mapped_column(
+        String(96),
+        ForeignKey("hierarchy_nodes.node_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_by_user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.user_id"), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)

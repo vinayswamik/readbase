@@ -74,3 +74,44 @@ export interface WorkspaceMember {
 export interface WorkspaceMembersResponse {
   members: WorkspaceMember[];
 }
+
+export interface HierarchyNode {
+  node_id: string;
+  workspace_id: string;
+  display_name: string;
+  assigned_user_id: string;
+  assigned_user_email?: string | null;
+  assigned_user_name?: string | null;
+  x: number;
+  y: number;
+  created_by_user_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HierarchyConnection {
+  connection_id: string;
+  workspace_id: string;
+  parent_node_id: string;
+  child_node_id: string;
+  created_by_user_id: string;
+  created_at: string;
+}
+
+export interface HierarchyGraphResponse {
+  nodes: HierarchyNode[];
+  connections: HierarchyConnection[];
+  assignable_users: HierarchyAssignableUser[];
+}
+
+export interface CreateHierarchyNodeResponse {
+  node: HierarchyNode;
+  connection: HierarchyConnection | null;
+}
+
+export interface HierarchyAssignableUser {
+  user_id: string;
+  email: string;
+  name: string;
+  is_owner: boolean;
+}

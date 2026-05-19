@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -55,6 +55,22 @@ def init_database(*, seed_admins: bool = True) -> None:
     from src.backend.infrastructure import models  # noqa: F401
 
     settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _reset_legacy_hierarchy_schema()
     Base.metadata.create_all(bind=engine)
     if seed_admins:
         seed_bootstrap_admins()
+
+
+def _reset_legacy_hierarchy_schema() -> None:
+    inspector = inspect(engine)
+    if "hierarchy_nodes" not in inspector.get_table_names():
+        return
+    column_names = {column["name"] for column in inspector.get_columns("hierarchy_nodes")}
+    has_assigned_user_schema = {"display_name", "assigned_user_id"}.issubset(column_names)
+    has_legacy_schema = bool({"title", "node_type"} & column_names)
+    if has_assigned_user_schema and not has_legacy_schema:
+        return
+
+    with engine.begin() as connection:
+        connection.execute(text("DROP TABLE IF EXISTS hierarchy_connections"))
+        connection.execute(text("DROP TABLE IF EXISTS hierarchy_nodes"))

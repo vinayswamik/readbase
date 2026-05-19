@@ -58,7 +58,9 @@ export function App() {
     try {
       const session = await fetchJson<SessionResponse>("/api/auth/session");
       if (session.authenticated) {
-        setUser(session.user);
+        setUser((currentUser) =>
+          areSameUser(currentUser, session.user) ? currentUser : session.user,
+        );
         if (!backgroundCheck) {
           setError(readAuthErrorFromUrl());
         }
@@ -123,6 +125,18 @@ export function App() {
   }
 
   return <LoginPage loading={isSubmitting} error={error} onLogin={handleGoogleLogin} />;
+}
+
+function areSameUser(currentUser: AuthUser | null, nextUser: AuthUser | null | undefined): boolean {
+  if (!currentUser || !nextUser) {
+    return currentUser === nextUser;
+  }
+  return (
+    currentUser.id === nextUser.id &&
+    currentUser.email === nextUser.email &&
+    currentUser.name === nextUser.name &&
+    currentUser.role === nextUser.role
+  );
 }
 
 function readAuthErrorFromUrl(): string | null {
