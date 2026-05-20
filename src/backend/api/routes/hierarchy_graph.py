@@ -29,10 +29,11 @@ router = APIRouter(prefix="/workspaces/{workspace_id}/graph", tags=["hierarchy g
 @router.get("", response_model=HierarchyGraphResponse)
 def workspace_graph(
     workspace_id: str,
+    user=Depends(require_authenticated_user),
     _workspace=Depends(require_workspace_access),
 ) -> dict:
     try:
-        return get_workspace_graph(workspace_id)
+        return get_workspace_graph(workspace_id, user)
     except ServiceError as exc:
         raise service_error_to_http(exc) from exc
 

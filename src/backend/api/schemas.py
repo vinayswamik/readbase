@@ -77,6 +77,19 @@ class WorkspaceMembersResponse(BaseModel):
     members: list[WorkspaceMemberResponse]
 
 
+class WorkspaceConnectorResponse(BaseModel):
+    connector_id: str
+    enabled: bool
+
+
+class WorkspaceConnectorsResponse(BaseModel):
+    connectors: list[WorkspaceConnectorResponse]
+
+
+class UpdateWorkspaceConnectorRequest(BaseModel):
+    enabled: bool
+
+
 class WorkspaceResponse(BaseModel):
     workspace_id: str
     owner_user_id: str

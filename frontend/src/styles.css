@@ -514,18 +514,6 @@ button {
   text-transform: uppercase;
 }
 
-.index-form {
-  display: grid;
-  gap: 10px;
-}
-
-.index-form label {
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.index-form input,
 .ask-form textarea {
   width: 100%;
   border: 1px solid var(--line);
@@ -533,11 +521,6 @@ button {
   background: #fff;
   color: var(--ink);
   outline: none;
-}
-
-.index-form input {
-  min-height: 42px;
-  padding: 0 12px;
 }
 
 .checkbox-row {
@@ -756,34 +739,146 @@ button {
   margin-bottom: 16px;
 }
 
-.sidebar-summary {
+.connector-panel {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  gap: 0;
+  border-top: 1px solid #e4e7ec;
+  border-bottom: 1px solid #e4e7ec;
   margin-bottom: 14px;
 }
 
-.sidebar-summary div {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fff;
-  padding: 10px;
-}
-
-.sidebar-summary span {
+.connector-panel-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 40px;
+  border: 0;
+  background: transparent;
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 800;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  padding: 0;
   text-transform: uppercase;
+  text-align: left;
 }
 
-.sidebar-summary strong {
+.connector-panel-trigger:hover {
   color: var(--ink);
-  font-size: 20px;
+}
+
+.connector-panel-trigger:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 4px var(--focus-ring);
+}
+
+.connector-chevron {
+  color: #667085;
+  font-size: 14px;
   line-height: 1;
+}
+
+.connector-list {
+  display: grid;
+}
+
+.connector-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  border-top: 1px solid #e4e7ec;
+  padding: 7px 0;
+}
+
+.connector-open {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 34px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 0;
+  text-align: left;
+}
+
+.connector-open:hover:not(:disabled) {
+  color: var(--button);
+}
+
+.connector-open:disabled {
+  color: #667085;
+  cursor: default;
+}
+
+.connector-open span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connector-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+}
+
+.connector-logo svg {
+  display: block;
+  width: 24px;
+  height: 24px;
+}
+
+.connector-toggle {
+  position: relative;
+  width: 40px;
+  height: 24px;
+  border: 1px solid #d0d5dd;
+  border-radius: 999px;
+  background: #e4e7ec;
+  cursor: pointer;
+  padding: 0;
+}
+
+.connector-toggle span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.2);
+  transition:
+    left 0.16s ease,
+    background 0.16s ease;
+}
+
+.connector-toggle.active {
+  border-color: #155eef;
+  background: #155eef;
+}
+
+.connector-toggle.active span {
+  left: 19px;
+}
+
+.connector-toggle:focus-visible,
+.connector-open:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 4px var(--focus-ring);
 }
 
 .control-tabs {
@@ -875,6 +970,156 @@ button {
   line-height: 1.45;
   padding: 14px;
   text-align: center;
+}
+
+.connector-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: rgba(16, 24, 40, 0.38);
+  padding: 18px;
+}
+
+.connector-modal {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(560px, 100%);
+  max-height: min(720px, calc(100vh - 36px));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 24px 64px rgba(16, 24, 40, 0.24);
+  overflow: hidden;
+}
+
+.connector-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid var(--line);
+  background: #f8fafc;
+  padding: 16px;
+}
+
+.connector-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.connector-modal-title h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.connector-modal-title p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.connector-close-button {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.connector-close-button:hover {
+  color: var(--ink);
+  background: #f2f4f7;
+}
+
+.connector-modal-body {
+  display: grid;
+  gap: 12px;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.connector-modal-body label,
+.connector-access-list legend {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.connector-modal-body > input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  outline: none;
+  padding: 0 12px;
+}
+
+.connector-access-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  margin: 0;
+  padding: 12px;
+}
+
+.connector-access-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 36px;
+  border: 1px solid #eaecf0;
+  border-radius: 8px;
+  background: #fff;
+  padding: 7px 9px;
+}
+
+.connector-access-row input {
+  width: 16px;
+  height: 16px;
+}
+
+.connector-access-row span {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.connector-access-row strong {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.connector-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.connector-modal-actions .primary-button,
+.connector-modal-actions .secondary-action-button {
+  min-width: 104px;
+  padding: 0 14px;
 }
 
 .graph-stage {
@@ -1396,6 +1641,16 @@ button {
   .connection-row,
   .overlay-ask-form {
     grid-template-columns: 1fr;
+  }
+
+  .connector-modal-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .connector-modal-actions .primary-button,
+  .connector-modal-actions .secondary-action-button {
+    width: 100%;
   }
 
   .chat-overlay {

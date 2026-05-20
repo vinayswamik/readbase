@@ -135,6 +135,49 @@ class WorkspaceServiceTests(unittest.TestCase):
                 "admin@example.com",
             )
 
+    def test_workspace_connectors_default_disabled_and_persist(self):
+        workspace = workspace_service.create_workspace("admin-1", "Demo", owner_email="admin@example.com")
+
+        initial = workspace_service.list_workspace_connectors(workspace["workspace_id"])
+        self.assertEqual(
+            {connector["connector_id"]: connector["enabled"] for connector in initial["connectors"]},
+            {
+                "jira": False,
+                "slack": False,
+                "github": False,
+                "confluence": False,
+                "linear": False,
+            },
+        )
+
+        updated = workspace_service.update_workspace_connector(
+            workspace["workspace_id"],
+            "github",
+            True,
+            updated_by_user_id="admin-1",
+        )
+        self.assertEqual(updated, {"connector_id": "github", "enabled": True})
+
+        persisted = workspace_service.list_workspace_connectors(workspace["workspace_id"])
+        self.assertTrue(
+            next(
+                connector
+                for connector in persisted["connectors"]
+                if connector["connector_id"] == "github"
+            )["enabled"]
+        )
+
+    def test_unknown_workspace_connector_fails(self):
+        workspace = workspace_service.create_workspace("admin-1", "Demo", owner_email="admin@example.com")
+
+        with self.assertRaises(ValidationError):
+            workspace_service.update_workspace_connector(
+                workspace["workspace_id"],
+                "unknown",
+                True,
+                updated_by_user_id="admin-1",
+            )
+
     def test_get_active_workspace_clears_missing_cli_state(self):
         workspace_service.set_active_workspace_id("missing")
 

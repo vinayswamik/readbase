@@ -1,4 +1,4 @@
-import { FormEvent, MouseEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   deleteJson,
@@ -22,24 +22,30 @@ import type {
   ReposResponse,
   SourceMatch,
   Workspace,
+  WorkspaceConnectorsResponse,
+  WorkspaceMember,
+  WorkspaceMembersResponse,
 } from "../types";
+import { WorkspaceChatBox } from "./WorkspaceChatBox";
+import {
+  WorkspaceGraphCanvas,
+  type BoardSize,
+  type EdgeSegment,
+  type Viewport,
+} from "./WorkspaceGraphCanvas";
+import {
+  CONNECTORS,
+  ConnectorSetupModal,
+  WorkspaceLeftPanel,
+  type ConnectorId,
+  type CreateNodeDraft,
+  type SidebarTab,
+} from "./WorkspaceLeftPanel";
 
 const NODE_WIDTH = 168;
 const NODE_HEIGHT = 76;
 const DRAG_THRESHOLD_PX = 3;
 const GRAPH_VIEW_BUFFER = 360;
-const MAX_PICKER_RESULTS = 20;
-
-type Viewport = {
-  x: number;
-  y: number;
-  scale: number;
-};
-
-type BoardSize = {
-  width: number;
-  height: number;
-};
 
 type DragState = {
   nodeId: string;
@@ -57,22 +63,6 @@ type PanState = {
   startY: number;
 };
 
-type EdgeSegment = {
-  connectionId: string;
-  x: number;
-  y: number;
-  length: number;
-  angle: number;
-};
-
-type SidebarTab = "repository" | "graph" | "details";
-
-type CreateNodeDraft = {
-  displayName: string;
-  assignedUserId: string;
-  parentNodeId: string;
-};
-
 export function WorkspaceChatPage({
   user,
   workspace,
@@ -86,10 +76,22 @@ export function WorkspaceChatPage({
 }) {
   const [repoId, setRepoId] = useState<string | null>(null);
   const [repos, setRepos] = useState<IndexedRepo[]>([]);
-  const [repoUrl, setRepoUrl] = useState("");
-  const [refreshRepo, setRefreshRepo] = useState(false);
-  const [repoStatus, setRepoStatus] = useState("No repository indexed in this workspace.");
   const [repoListError, setRepoListError] = useState<string | null>(null);
+  const [connectorEnabled, setConnectorEnabled] = useState<Record<ConnectorId, boolean>>({
+    jira: false,
+    slack: false,
+    github: false,
+    confluence: false,
+    linear: false,
+  });
+  const [activeConnectorId, setActiveConnectorId] = useState<ConnectorId | null>(null);
+  const [connectorRepoUrl, setConnectorRepoUrl] = useState("");
+  const [connectorRefreshRepo, setConnectorRefreshRepo] = useState(false);
+  const [connectorMembers, setConnectorMembers] = useState<WorkspaceMember[]>([]);
+  const [connectorAccessEmails, setConnectorAccessEmails] = useState<string[]>([]);
+  const [connectorStatus, setConnectorStatus] = useState("");
+  const [connectorError, setConnectorError] = useState<string | null>(null);
+  const [connectorMembersLoading, setConnectorMembersLoading] = useState(false);
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [mode, setMode] = useState("retrieval");
@@ -120,6 +122,10 @@ export function WorkspaceChatPage({
   const selectedRepo = useMemo(
     () => repos.find((repo) => repo.repo_id === repoId) ?? null,
     [repoId, repos],
+  );
+  const activeConnector = useMemo(
+    () => CONNECTORS.find((connector) => connector.id === activeConnectorId) ?? null,
+    [activeConnectorId],
   );
   const selectedNode = useMemo(
     () => nodes.find((node) => node.node_id === selectedNodeId) ?? null,
@@ -280,6 +286,40 @@ export function WorkspaceChatPage({
     }
   }, [handleApiError, workspace.workspace_id]);
 
+  const loadConnectorState = useCallback(async () => {
+    try {
+      const result = await fetchJson<WorkspaceConnectorsResponse>(
+        `/api/workspaces/${workspace.workspace_id}/connectors`,
+      );
+      setConnectorEnabled(connectorEnabledFromResponse(result));
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    }
+  }, [handleApiError, workspace.workspace_id]);
+
+  const loadConnectorMembers = useCallback(async () => {
+    setConnectorMembersLoading(true);
+    setConnectorError(null);
+    try {
+      const result = await fetchJson<WorkspaceMembersResponse>(
+        `/api/workspaces/${workspace.workspace_id}/members`,
+      );
+      const members = result.members || [];
+      setConnectorMembers(members);
+      setConnectorAccessEmails((currentEmails) => {
+        const memberEmails = members.map((member) => member.email);
+        if (!currentEmails.length) {
+          return memberEmails;
+        }
+        return currentEmails.filter((email) => memberEmails.includes(email));
+      });
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    } finally {
+      setConnectorMembersLoading(false);
+    }
+  }, [handleApiError, workspace.workspace_id]);
+
   const queueGraphRefresh = useCallback(() => {
     if (queuedGraphRefreshRef.current !== null) {
       window.clearTimeout(queuedGraphRefreshRef.current);
@@ -293,7 +333,14 @@ export function WorkspaceChatPage({
   useEffect(() => {
     void loadRepos();
     void loadGraph();
-  }, [loadGraph, loadRepos]);
+    void loadConnectorState();
+  }, [loadConnectorState, loadGraph, loadRepos]);
+
+  useEffect(() => {
+    if (activeConnectorId) {
+      void loadConnectorMembers();
+    }
+  }, [activeConnectorId, loadConnectorMembers]);
 
   useEffect(
     () => () => {
@@ -340,15 +387,71 @@ export function WorkspaceChatPage({
     return () => resizeObserver.disconnect();
   }, [graphRevision, panelOpen]);
 
-  async function handleIndexSubmit(event: FormEvent<HTMLFormElement>) {
+  function openConnectorModal(connectorId: ConnectorId) {
+    if (!connectorEnabled[connectorId]) {
+      return;
+    }
+    setActiveConnectorId(connectorId);
+    setConnectorStatus("");
+    setConnectorError(null);
+    if (connectorId === "github" && !connectorRepoUrl) {
+      setConnectorRepoUrl(selectedRepo?.repo_url || "");
+    }
+  }
+
+  function closeConnectorModal() {
+    setActiveConnectorId(null);
+    setConnectorStatus("");
+    setConnectorError(null);
+  }
+
+  async function handleConnectorToggle(connectorId: ConnectorId) {
+    const nextEnabled = !connectorEnabled[connectorId];
+    setConnectorEnabled((currentEnabled) => ({
+      ...currentEnabled,
+      [connectorId]: nextEnabled,
+    }));
+    if (!nextEnabled && activeConnectorId === connectorId) {
+      closeConnectorModal();
+    }
+    try {
+      const result = await patchJson<
+        { enabled: boolean },
+        { connector_id: string; enabled: boolean }
+      >(`/api/workspaces/${workspace.workspace_id}/connectors/${connectorId}`, {
+        enabled: nextEnabled,
+      });
+      setConnectorEnabled((currentEnabled) => ({
+        ...currentEnabled,
+        [connectorId]: result.enabled,
+      }));
+    } catch (error) {
+      setConnectorEnabled((currentEnabled) => ({
+        ...currentEnabled,
+        [connectorId]: !nextEnabled,
+      }));
+      handleApiError(error, setConnectorError);
+    }
+  }
+
+  function handleConnectorAccessToggle(email: string) {
+    setConnectorAccessEmails((currentEmails) =>
+      currentEmails.includes(email)
+        ? currentEmails.filter((currentEmail) => currentEmail !== email)
+        : [...currentEmails, email],
+    );
+  }
+
+  async function handleGithubConnectorSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const trimmedUrl = repoUrl.trim();
+    const trimmedUrl = connectorRepoUrl.trim();
     if (!trimmedUrl) {
       return;
     }
 
     setIndexing(true);
-    setRepoStatus("Cloning and indexing repository. This can take a minute.");
+    setConnectorStatus("Cloning and indexing repository. This can take a minute.");
+    setConnectorError(null);
 
     try {
       const result = await postJson<
@@ -356,13 +459,17 @@ export function WorkspaceChatPage({
         IndexResponse
       >(`/api/workspaces/${workspace.workspace_id}/index`, {
         repo_url: trimmedUrl,
-        refresh: refreshRepo,
+        refresh: connectorRefreshRepo,
       });
       setRepoId(result.repo_id);
-      setRepoStatus(formatRepoStatus(result));
+      setConnectorStatus(
+        `Repository indexed. ${connectorAccessEmails.length} workspace member${
+          connectorAccessEmails.length === 1 ? "" : "s"
+        } selected for access.`,
+      );
       await loadRepos(result.repo_id);
     } catch (error) {
-      handleApiError(error, setRepoStatus);
+      handleApiError(error, setConnectorError);
     } finally {
       setIndexing(false);
     }
@@ -585,8 +692,6 @@ export function WorkspaceChatPage({
 
   function handleRepoSelect(repo: IndexedRepo) {
     setRepoId(repo.repo_id);
-    setRepoUrl(repo.repo_url);
-    setRepoStatus(formatRepoStatus(repo));
   }
 
   function handleBoardMouseDown(event: MouseEvent<HTMLDivElement>) {
@@ -658,10 +763,6 @@ export function WorkspaceChatPage({
     setPanState(null);
   }
 
-  function handleBoardWheel(event: MouseEvent<HTMLDivElement>) {
-    event.preventDefault();
-  }
-
   function handleZoom(delta: number) {
     setViewport((currentViewport) => ({
       ...currentViewport,
@@ -672,297 +773,65 @@ export function WorkspaceChatPage({
   const canAsk = Boolean(repoId && question.trim() && !asking);
   return (
     <section className={`graph-workspace${panelOpen ? " panel-open" : " panel-closed"}`}>
-      <aside className="graph-sidebar" aria-label="Workspace controls">
-        <div className="sidebar-topline">
-          <button type="button" className="back-button" onClick={onBack}>
-            Back
-          </button>
-          <span className="status-chip">{mode}</span>
-        </div>
-        <header className="brand sidebar-brand">
-          <div>
-            <h1>{workspace.name}</h1>
-            <p>Hierarchy graph</p>
-          </div>
-        </header>
+      <WorkspaceLeftPanel
+        workspace={workspace}
+        mode={mode}
+        sidebarTab={sidebarTab}
+        userRole={user.role}
+        repos={repos}
+        selectedRepoId={repoId}
+        repoListError={repoListError}
+        graphMutating={graphMutating}
+        graphStatus={graphStatus}
+        availableAssignees={availableAssignees}
+        parentOptions={parentOptions}
+        ownNode={ownNode}
+        selectedNode={selectedNode}
+        canManageSelectedNode={canManageSelectedNode}
+        editTitle={editTitle}
+        editAssignedUserId={editAssignedUserId}
+        reassignOptions={reassignOptions}
+        canDeleteSelectedNode={canDeleteSelectedNode}
+        reparentNodeId={reparentNodeId}
+        reparentOptions={reparentOptions}
+        connectorEnabled={connectorEnabled}
+        onBack={onBack}
+        onSidebarTabChange={setSidebarTab}
+        onRepoSelect={handleRepoSelect}
+        onCreateNode={handleCreateNode}
+        onUpdateSelectedNode={handleUpdateSelectedNode}
+        onDeleteSelectedNode={handleDeleteSelectedNode}
+        onEditTitleChange={setEditTitle}
+        onEditAssignedUserIdChange={setEditAssignedUserId}
+        onReparentNodeIdChange={setReparentNodeId}
+        onReparentSelectedNode={handleReparentSelectedNode}
+        onOpenConnector={openConnectorModal}
+        onToggleConnector={handleConnectorToggle}
+      />
 
-        <div className="sidebar-summary" aria-label="Graph summary">
-          <div>
-            <span>Nodes</span>
-            <strong>{nodes.length}</strong>
-          </div>
-          <div>
-            <span>Links</span>
-            <strong>{connections.length}</strong>
-          </div>
-          <div>
-            <span>Repos</span>
-            <strong>{repos.length}</strong>
-          </div>
-        </div>
-
-        <div className="control-tabs" role="tablist" aria-label="Workspace control sections">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={sidebarTab === "graph"}
-            className={sidebarTab === "graph" ? "active" : ""}
-            onClick={() => setSidebarTab("graph")}
-          >
-            Graph
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={sidebarTab === "details"}
-            className={sidebarTab === "details" ? "active" : ""}
-            onClick={() => setSidebarTab("details")}
-          >
-            Details
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={sidebarTab === "repository"}
-            className={sidebarTab === "repository" ? "active" : ""}
-            onClick={() => setSidebarTab("repository")}
-          >
-            Repos
-          </button>
-        </div>
-
-        {sidebarTab === "repository" ? (
-          <div className="tab-panel" role="tabpanel">
-            <section className="tool-section" aria-labelledby="repository-heading">
-              <div className="tool-section-header">
-                <div>
-                  <h2 id="repository-heading">Repository Index</h2>
-                  <p>Connect source code for Q&amp;A.</p>
-                </div>
-              </div>
-              <form className="index-form" onSubmit={handleIndexSubmit}>
-                <label htmlFor="repoUrl">GitHub URL</label>
-                <input
-                  id="repoUrl"
-                  name="repoUrl"
-                  type="url"
-                  value={repoUrl}
-                  placeholder="https://github.com/owner/repo"
-                  required
-                  onChange={(event) => setRepoUrl(event.target.value)}
-                />
-                <label className="checkbox-row">
-                  <input
-                    type="checkbox"
-                    checked={refreshRepo}
-                    onChange={(event) => setRefreshRepo(event.target.checked)}
-                  />
-                  <span>Re-clone existing index</span>
-                </label>
-                <button type="submit" disabled={indexing} className="primary-button">
-                  {indexing ? "Indexing..." : "Index repository"}
-                </button>
-              </form>
-              <div className="status-text" aria-live="polite">
-                {repoStatus}
-              </div>
-            </section>
-
-            <section className="tool-section" aria-labelledby="indexed-repos-heading">
-              <div className="tool-section-header">
-                <div>
-                  <h2 id="indexed-repos-heading">Indexed Repos</h2>
-                  <p>Select context for the ask widget.</p>
-                </div>
-              </div>
-              <RepoList
-                repos={repos}
-                selectedRepoId={repoId}
-                error={repoListError}
-                onSelect={handleRepoSelect}
-              />
-            </section>
-          </div>
-        ) : null}
-
-        {sidebarTab === "graph" ? (
-          <div className="tab-panel" role="tabpanel">
-            <section className="tool-section" aria-labelledby="graph-create-heading">
-              <div className="tool-section-header">
-                <div>
-                  <h2 id="graph-create-heading">Create Node</h2>
-                  <p>Add hierarchy entries to the board.</p>
-                </div>
-              </div>
-              <CreateNodeForm
-                userRole={user.role}
-                disabled={graphMutating}
-                availableAssignees={availableAssignees}
-                parentOptions={parentOptions}
-                ownNode={ownNode}
-                onCreate={handleCreateNode}
-              />
-              {graphStatus ? <div className="status-text">{graphStatus}</div> : null}
-            </section>
-          </div>
-        ) : null}
-
-        {sidebarTab === "details" ? (
-          <div className="tab-panel" role="tabpanel">
-            <section className="tool-section" aria-labelledby="node-actions-heading">
-              <div className="tool-section-header">
-                <div>
-                  <h2 id="node-actions-heading">Selected Node</h2>
-                  <p>Inspect and manage the active node.</p>
-                </div>
-              </div>
-              {selectedNode ? (
-                <form className="graph-control-form" onSubmit={handleUpdateSelectedNode}>
-                  <div className="selected-node-meta">
-                    <span>{selectedNode.assigned_user_email || "Assigned user"}</span>
-                    <strong>{selectedNode.display_name}</strong>
-                  </div>
-                  <div className="status-text compact">
-                    Assigned to {selectedNode.assigned_user_name || selectedNode.assigned_user_email || "workspace user"}.
-                  </div>
-                  <label htmlFor="editNodeTitle">Rename</label>
-                  <input
-                    id="editNodeTitle"
-                    value={editTitle}
-                    disabled={graphMutating || !canManageSelectedNode}
-                    onChange={(event) => setEditTitle(event.target.value)}
-                  />
-                  <label id="editAssignedUserLabel">Assigned user</label>
-                  <AssignableUserPicker
-                    value={editAssignedUserId}
-                    disabled={graphMutating || !canManageSelectedNode}
-                    availableAssignees={reassignOptions}
-                    labelId="editAssignedUserLabel"
-                    emptyLabel="No assignee selected"
-                    searchPlaceholder="Search assignable users"
-                    onChange={setEditAssignedUserId}
-                  />
-                  <button
-                    type="submit"
-                    className="secondary-action-button"
-                    disabled={
-                      graphMutating ||
-                      !canManageSelectedNode ||
-                      !editTitle.trim() ||
-                      !editAssignedUserId
-                    }
-                  >
-                    Save node
-                  </button>
-                  <button
-                    type="button"
-                    className="danger-button"
-                    disabled={graphMutating || !canDeleteSelectedNode}
-                    onClick={handleDeleteSelectedNode}
-                  >
-                    Delete node
-                  </button>
-                </form>
-              ) : (
-                <div className="empty-panel-state">Select a node on the board to view details.</div>
-              )}
-            </section>
-            {selectedNode && user.role === "admin" ? (
-              <section className="tool-section" aria-labelledby="node-parent-heading">
-                <div className="tool-section-header">
-                  <div>
-                    <h2 id="node-parent-heading">Parent</h2>
-                    <p>Move this node under another node or make it top-level.</p>
-                  </div>
-                </div>
-                <form className="graph-control-form" onSubmit={handleReparentSelectedNode}>
-                  <label id="reparentNodeLabel">Parent node</label>
-                  <ParentNodeSelect
-                    value={reparentNodeId}
-                    disabled={graphMutating}
-                    userRole={user.role}
-                    parentOptions={reparentOptions}
-                    labelId="reparentNodeLabel"
-                    onChange={setReparentNodeId}
-                  />
-                  <button type="submit" className="secondary-action-button" disabled={graphMutating}>
-                    Update parent
-                  </button>
-                </form>
-              </section>
-            ) : null}
-          </div>
-        ) : null}
-      </aside>
-
-      <section className="graph-stage" aria-label="Hierarchy graph board">
-        <button
-          type="button"
-          className="panel-toggle"
-          aria-expanded={panelOpen}
-          onClick={() => setPanelOpen((open) => !open)}
-        >
-          {panelOpen ? "Hide panel" : "Show panel"}
-        </button>
-        <div className="graph-toolbar" aria-label="Board controls">
-          <button type="button" onClick={() => handleZoom(0.1)}>
-            +
-          </button>
-          <button type="button" onClick={() => handleZoom(-0.1)}>
-            -
-          </button>
-          <button type="button" onClick={() => setViewport({ x: 120, y: 80, scale: 1 })}>
-            Reset
-          </button>
-        </div>
-        <div
-          ref={boardRef}
-          key={graphRevision}
-          className="graph-board"
-          onMouseDown={handleBoardMouseDown}
-          onMouseMove={handleBoardMouseMove}
-          onMouseUp={handleBoardMouseUp}
-          onMouseLeave={handleBoardMouseUp}
-          onWheel={(event) => {
-            event.preventDefault();
-            handleZoom(event.deltaY > 0 ? -0.08 : 0.08);
-          }}
-          onContextMenu={(event) => event.preventDefault()}
-        >
-          {!nodes.length ? (
-            <div className="graph-empty">
-              {user.role === "admin"
-                ? "Create a parent node from the panel to start the hierarchy."
-                : "The board is empty. Wait for an admin to create a parent node."}
-            </div>
-          ) : null}
-          <div
-            className="graph-canvas"
-            style={{
-              transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})`,
-            }}
-          >
-            <div className="graph-edges">
-              {edgeSegments.map((edge) => (
-                <GraphEdge key={edge.connectionId} edge={edge} />
-              ))}
-            </div>
-            {visibleNodes.map((node) => (
-              <button
-                key={node.node_id}
-                type="button"
-                className={`graph-node${node.node_id === selectedNodeId ? " selected" : ""}`}
-                style={{ left: node.x, top: node.y }}
-                onMouseDown={(event) => handleNodeMouseDown(event, node)}
-              >
-                <strong>{node.display_name}</strong>
-                <span>{node.assigned_user_name || node.assigned_user_email || "Assigned user"}</span>
-              </button>
-            ))}
-          </div>
-        </div>
+      <WorkspaceGraphCanvas
+        userRole={user.role}
+        panelOpen={panelOpen}
+        graphRevision={graphRevision}
+        boardRef={boardRef}
+        nodes={nodes}
+        visibleNodes={visibleNodes}
+        selectedNodeId={selectedNodeId}
+        viewport={viewport}
+        edgeSegments={edgeSegments}
+        chatOpen={chatOpen}
+        messageCount={messages.length}
+        onPanelToggle={() => setPanelOpen((open) => !open)}
+        onZoom={handleZoom}
+        onViewportReset={() => setViewport({ x: 120, y: 80, scale: 1 })}
+        onBoardMouseDown={handleBoardMouseDown}
+        onBoardMouseMove={handleBoardMouseMove}
+        onBoardMouseUp={handleBoardMouseUp}
+        onNodeMouseDown={handleNodeMouseDown}
+        onOpenChat={() => setChatOpen(true)}
+      >
         {chatOpen ? (
-          <ChatOverlay
+          <WorkspaceChatBox
             messages={messages}
             question={question}
             asking={asking}
@@ -973,475 +842,27 @@ export function WorkspaceChatPage({
             onSubmit={handleAskSubmit}
             onClose={() => setChatOpen(false)}
           />
-        ) : (
-          <button type="button" className="floating-ask-button" onClick={() => setChatOpen(true)}>
-            Ask
-            {messages.length ? <span>{messages.length}</span> : null}
-          </button>
-        )}
-      </section>
-    </section>
-  );
-}
-
-function RepoList({
-  repos,
-  selectedRepoId,
-  error,
-  onSelect,
-}: {
-  repos: IndexedRepo[];
-  selectedRepoId: string | null;
-  error: string | null;
-  onSelect: (repo: IndexedRepo) => void;
-}) {
-  if (error) {
-    return <div className="status-text">{error}</div>;
-  }
-
-  if (!repos.length) {
-    return <div className="status-text">No indexed repositories yet.</div>;
-  }
-
-  return (
-    <div className="repo-list">
-      {repos.map((repo) => (
-        <button
-          key={repo.repo_id}
-          type="button"
-          className={`repo-item${repo.repo_id === selectedRepoId ? " active" : ""}`}
-          onClick={() => onSelect(repo)}
-        >
-          <span className="repo-url">{repo.repo_url}</span>
-          <span className="repo-meta">
-            {repo.file_count} files, {repo.chunk_count} chunks
-          </span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function CreateNodeForm({
-  userRole,
-  disabled,
-  availableAssignees,
-  parentOptions,
-  ownNode,
-  onCreate,
-}: {
-  userRole: AuthUser["role"];
-  disabled: boolean;
-  availableAssignees: HierarchyAssignableUser[];
-  parentOptions: HierarchyNode[];
-  ownNode: HierarchyNode | null;
-  onCreate: (draft: CreateNodeDraft) => Promise<boolean>;
-}) {
-  const [displayName, setDisplayName] = useState("");
-  const [assignedUserId, setAssignedUserId] = useState("");
-  const [parentNodeId, setParentNodeId] = useState("");
-  const handleAssignedUserChange = useCallback((nextAssignedUserId: string) => {
-    setAssignedUserId(nextAssignedUserId);
-  }, []);
-  const handleParentNodeChange = useCallback((nextParentNodeId: string) => {
-    setParentNodeId(nextParentNodeId);
-  }, []);
-
-  useEffect(() => {
-    if (assignedUserId && !availableAssignees.some((user) => user.user_id === assignedUserId)) {
-      setAssignedUserId("");
-    }
-  }, [assignedUserId, availableAssignees]);
-
-  useEffect(() => {
-    if (userRole !== "admin") {
-      setParentNodeId(ownNode?.node_id ?? "");
-      return;
-    }
-    if (parentNodeId && !parentOptions.some((node) => node.node_id === parentNodeId)) {
-      setParentNodeId("");
-    }
-  }, [ownNode, parentNodeId, parentOptions, userRole]);
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const created = await onCreate({
-      displayName,
-      assignedUserId,
-      parentNodeId,
-    });
-    if (created) {
-      setDisplayName("");
-      setAssignedUserId("");
-      if (userRole === "admin") {
-        setParentNodeId("");
-      }
-    }
-  }
-
-  const canCreate = Boolean(
-    !disabled &&
-      displayName.trim() &&
-      assignedUserId &&
-      (userRole === "admin" || parentNodeId),
-  );
-
-  return (
-    <form className="graph-control-form" onSubmit={handleSubmit}>
-      <label htmlFor="nodeTitle">Display name</label>
-      <textarea
-        id="nodeTitle"
-        value={displayName}
-        maxLength={120}
-        rows={1}
-        placeholder="Name shown on graph"
-        autoComplete="off"
-        autoCorrect="off"
-        autoCapitalize="off"
-        spellCheck={false}
-        disabled={disabled}
-        onChange={(event) => setDisplayName(event.target.value)}
-      />
-      <label id="assignedUserLabel">Assigned user</label>
-      <AssignableUserPicker
-        value={assignedUserId}
-        disabled={disabled}
-        availableAssignees={availableAssignees}
-        labelId="assignedUserLabel"
-        emptyLabel="No assignee selected"
-        searchPlaceholder="Search unassigned users"
-        onChange={handleAssignedUserChange}
-      />
-      <label id="parentNodeLabel">Parent</label>
-      <ParentNodeSelect
-        value={parentNodeId}
-        disabled={disabled || userRole !== "admin"}
-        userRole={userRole}
-        parentOptions={parentOptions}
-        labelId="parentNodeLabel"
-        onChange={handleParentNodeChange}
-      />
-      {availableAssignees.length ? null : (
-        <div className="status-text compact">No unassigned logged-in workspace users.</div>
-      )}
-      <button type="submit" className="primary-button" disabled={!canCreate}>
-        {disabled ? "Working..." : "Create node"}
-      </button>
-    </form>
-  );
-}
-
-const AssignableUserPicker = memo(function AssignableUserPicker({
-  value,
-  disabled,
-  availableAssignees,
-  labelId,
-  emptyLabel,
-  searchPlaceholder,
-  onChange,
-}: {
-  value: string;
-  disabled: boolean;
-  availableAssignees: HierarchyAssignableUser[];
-  labelId: string;
-  emptyLabel: string;
-  searchPlaceholder: string;
-  onChange: (assignedUserId: string) => void;
-}) {
-  const [query, setQuery] = useState("");
-  const selectedUser = availableAssignees.find((user) => user.user_id === value) ?? null;
-  const normalizedQuery = query.trim().toLowerCase();
-  const results = useMemo(() => {
-    const matches = normalizedQuery
-      ? availableAssignees.filter((assignableUser) =>
-          `${assignableUser.name} ${assignableUser.email}`.toLowerCase().includes(normalizedQuery),
-        )
-      : availableAssignees;
-    const visible = matches.slice(0, MAX_PICKER_RESULTS);
-    if (selectedUser && !visible.some((user) => user.user_id === selectedUser.user_id)) {
-      return [selectedUser, ...visible];
-    }
-    return visible;
-  }, [availableAssignees, normalizedQuery, selectedUser]);
-
-  return (
-    <div className="compact-picker" aria-labelledby={labelId}>
-      <input
-        type="search"
-        value={query}
-        placeholder={searchPlaceholder}
-        disabled={disabled}
-        autoComplete="off"
-        spellCheck={false}
-        onChange={(event) => setQuery(event.target.value)}
-      />
-      <div className="picker-current">
-        <span>{selectedUser ? selectedUser.name || selectedUser.email : emptyLabel}</span>
-        {selectedUser ? (
-          <button type="button" disabled={disabled} onClick={() => onChange("")}>
-            Clear
-          </button>
         ) : null}
-      </div>
-      {query || !selectedUser ? (
-        <div className="picker-results">
-          {results.map((assignableUser) => (
-            <button
-              key={assignableUser.user_id}
-              type="button"
-              disabled={disabled}
-              className={assignableUser.user_id === value ? "active" : ""}
-              onClick={() => {
-                onChange(assignableUser.user_id);
-                setQuery("");
-              }}
-            >
-              {assignableUser.name || assignableUser.email}
-            </button>
-          ))}
-          {!results.length ? <span>No users match.</span> : null}
-        </div>
-      ) : null}
-    </div>
-  );
-});
-
-const ParentNodeSelect = memo(function ParentNodeSelect({
-  value,
-  disabled,
-  userRole,
-  parentOptions,
-  labelId,
-  onChange,
-}: {
-  value: string;
-  disabled: boolean;
-  userRole: AuthUser["role"];
-  parentOptions: HierarchyNode[];
-  labelId: string;
-  onChange: (parentNodeId: string) => void;
-}) {
-  const [query, setQuery] = useState("");
-  const normalizedQuery = query.trim().toLowerCase();
-  const selectedParent = parentOptions.find((node) => node.node_id === value) ?? null;
-  const parentMatches = useMemo(
-    () =>
-      normalizedQuery
-        ? parentOptions.filter((node) => {
-            const searchable = [
-              node.display_name,
-              node.assigned_user_name || "",
-              node.assigned_user_email || "",
-            ]
-              .join(" ")
-              .toLowerCase();
-            return searchable.includes(normalizedQuery);
-          })
-        : parentOptions,
-    [normalizedQuery, parentOptions],
-  );
-  const filteredParents = useMemo(() => {
-    const visible = parentMatches.slice(0, MAX_PICKER_RESULTS);
-    if (selectedParent && !visible.some((node) => node.node_id === selectedParent.node_id)) {
-      return [selectedParent, ...visible];
-    }
-    return visible;
-  }, [parentMatches, selectedParent]);
-  const matchCount = parentMatches.length;
-
-  return (
-    <div className="compact-picker" aria-labelledby={labelId}>
-      {userRole === "admin" ? (
-        <input
-          type="search"
-          value={query}
-          placeholder="Search parent nodes"
-          disabled={disabled}
-          autoComplete="off"
-          spellCheck={false}
-          onChange={(event) => setQuery(event.target.value)}
+      </WorkspaceGraphCanvas>
+      {activeConnector ? (
+        <ConnectorSetupModal
+          connector={activeConnector}
+          repoUrl={connectorRepoUrl}
+          refreshRepo={connectorRefreshRepo}
+          members={connectorMembers}
+          accessEmails={connectorAccessEmails}
+          loadingMembers={connectorMembersLoading}
+          indexing={indexing}
+          status={connectorStatus}
+          error={connectorError}
+          onRepoUrlChange={setConnectorRepoUrl}
+          onRefreshRepoChange={setConnectorRefreshRepo}
+          onAccessToggle={handleConnectorAccessToggle}
+          onSubmit={handleGithubConnectorSubmit}
+          onClose={closeConnectorModal}
         />
       ) : null}
-      <div className="picker-current">
-        <span>{selectedParent ? selectedParent.display_name : "No parent"}</span>
-        {userRole === "admin" && selectedParent ? (
-          <button type="button" disabled={disabled} onClick={() => onChange("")}>
-            Clear
-          </button>
-        ) : null}
-      </div>
-      {userRole === "admin" && query ? (
-        <div className="picker-results">
-          {filteredParents.slice(0, MAX_PICKER_RESULTS).map((node) => (
-            <button
-              key={node.node_id}
-              type="button"
-              disabled={disabled}
-              className={node.node_id === value ? "active" : ""}
-              onClick={() => {
-                onChange(node.node_id);
-                setQuery("");
-              }}
-            >
-              {node.display_name}
-            </button>
-          ))}
-          {!filteredParents.length ? <span>No parent nodes match.</span> : null}
-          {matchCount > MAX_PICKER_RESULTS ? (
-            <span>Showing {MAX_PICKER_RESULTS} of {matchCount} matches.</span>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
-});
-
-function ConnectionList({
-  connections,
-  nodeById,
-  user,
-  disabled,
-  onDelete,
-}: {
-  connections: HierarchyConnection[];
-  nodeById: Map<string, HierarchyNode>;
-  user: AuthUser;
-  disabled: boolean;
-  onDelete: (connection: HierarchyConnection) => void;
-}) {
-  if (!connections.length) {
-    return <div className="status-text">No connections yet.</div>;
-  }
-
-  return (
-    <div className="connection-list">
-      {connections.map((connection) => {
-        const parent = nodeById.get(connection.parent_node_id);
-        const child = nodeById.get(connection.child_node_id);
-        const canDelete = Boolean(child && user.role === "admin");
-        return (
-          <div className="connection-row" key={connection.connection_id}>
-            <span>
-              {parent?.display_name || "Missing parent"} {"->"} {child?.display_name || "Missing child"}
-            </span>
-            <button
-              type="button"
-              className="danger-button"
-              disabled={disabled || !canDelete}
-              onClick={() => onDelete(connection)}
-            >
-              Remove
-            </button>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function GraphEdge({ edge }: { edge: EdgeSegment }) {
-  return (
-    <div
-      className="graph-edge"
-      style={{
-        left: edge.x,
-        top: edge.y,
-        width: edge.length,
-        transform: `rotate(${edge.angle}rad)`,
-      }}
-    />
-  );
-}
-
-function ChatOverlay({
-  messages,
-  question,
-  asking,
-  canAsk,
-  selectedRepo,
-  messageEndRef,
-  onQuestionChange,
-  onSubmit,
-  onClose,
-}: {
-  messages: ChatMessage[];
-  question: string;
-  asking: boolean;
-  canAsk: boolean;
-  selectedRepo: IndexedRepo | null;
-  messageEndRef: React.RefObject<HTMLDivElement | null>;
-  onQuestionChange: (question: string) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onClose: () => void;
-}) {
-  return (
-    <section className="chat-overlay" aria-label="Ask workspace">
-      <header className="chat-overlay-header">
-        <div>
-          <h2>Ask</h2>
-          <p>{selectedRepo ? repoLabel(selectedRepo) : "Select a repository first"}</p>
-        </div>
-        <button type="button" className="secondary-action-button" onClick={onClose}>
-          Close
-        </button>
-      </header>
-      <div className="overlay-messages">
-        {messages.length ? (
-          messages.map((message) => <MessageBubble key={message.id} message={message} />)
-        ) : (
-          <article className="message assistant">
-            <div className="message-body empty-message">No questions yet.</div>
-          </article>
-        )}
-        <div ref={messageEndRef} />
-      </div>
-      <form className="ask-form overlay-ask-form" onSubmit={onSubmit}>
-        <textarea
-          rows={2}
-          value={question}
-          placeholder={selectedRepo ? `Ask about ${repoLabel(selectedRepo)}` : "Select a repository first"}
-          required
-          onChange={(event) => onQuestionChange(event.target.value)}
-        />
-        <button type="submit" disabled={!canAsk} className="primary-button">
-          {asking ? "Thinking..." : "Ask"}
-        </button>
-      </form>
     </section>
-  );
-}
-
-function MessageBubble({ message }: { message: ChatMessage }) {
-  return (
-    <article className={`message ${message.role}`}>
-      <div className="message-body">
-        {message.text}
-        <SourceList sources={message.sources || []} mode={message.mode || "retrieval"} />
-      </div>
-    </article>
-  );
-}
-
-function SourceList({ sources, mode }: { sources: SourceMatch[]; mode: string }) {
-  if (!sources.length) {
-    return null;
-  }
-
-  return (
-    <div className="sources">
-      {sources.slice(0, 4).map((source) => (
-        <div
-          key={source.id}
-          className={`source${mode === "anthropic" ? " compact" : ""}`}
-        >
-          <div className="source-title">
-            {source.path}:{source.start_line}-{source.end_line} · score{" "}
-            {formatScore(source.score)}
-          </div>
-          {mode !== "anthropic" ? <pre>{source.text}</pre> : null}
-        </div>
-      ))}
-    </div>
   );
 }
 
@@ -1512,10 +933,6 @@ function getVisibleNodes(
   );
 }
 
-function formatRepoStatus(repo: IndexedRepo): string {
-  return `${repo.file_count} files indexed into ${repo.chunk_count} chunks.`;
-}
-
 function findParentNodeId(
   nodeId: string | null,
   connections: HierarchyConnection[],
@@ -1526,12 +943,22 @@ function findParentNodeId(
   return connections.find((connection) => connection.child_node_id === nodeId)?.parent_node_id ?? "";
 }
 
-function repoLabel(repo: IndexedRepo): string {
-  return repo.repo_url.replace(/^https?:\/\/github\.com\//, "");
-}
-
-function formatScore(score: number): string {
-  return Number.isFinite(score) ? score.toFixed(3) : String(score);
+function connectorEnabledFromResponse(
+  response: WorkspaceConnectorsResponse,
+): Record<ConnectorId, boolean> {
+  const enabled = CONNECTORS.reduce(
+    (currentEnabled, connector) => ({
+      ...currentEnabled,
+      [connector.id]: false,
+    }),
+    {} as Record<ConnectorId, boolean>,
+  );
+  for (const connector of response.connectors || []) {
+    if (connector.connector_id in enabled) {
+      enabled[connector.connector_id as ConnectorId] = Boolean(connector.enabled);
+    }
+  }
+  return enabled;
 }
 
 function clamp(value: number, min: number, max: number): number {

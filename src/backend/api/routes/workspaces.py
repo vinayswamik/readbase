@@ -20,6 +20,9 @@ from src.backend.api.schemas import (
     AddWorkspaceMemberRequest,
     WorkspaceMemberResponse,
     WorkspaceMembersResponse,
+    UpdateWorkspaceConnectorRequest,
+    WorkspaceConnectorResponse,
+    WorkspaceConnectorsResponse,
     ReposResponse,
     WorkspaceResponse,
     WorkspacesResponse,
@@ -31,9 +34,11 @@ from src.backend.application.services.workspace_service import (
     create_workspace,
     delete_workspace,
     add_workspace_member,
+    list_workspace_connectors,
     list_workspace_members,
     list_workspaces,
     remove_workspace_member,
+    update_workspace_connector,
 )
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
@@ -133,6 +138,36 @@ def workspace_members(
 ) -> dict:
     try:
         return {"members": list_workspace_members(user.user_id, workspace_id)}
+    except ServiceError as exc:
+        raise service_error_to_http(exc) from exc
+
+
+@router.get("/{workspace_id}/connectors", response_model=WorkspaceConnectorsResponse)
+def workspace_connectors(
+    workspace_id: str,
+    _workspace=Depends(require_workspace_access),
+) -> dict:
+    try:
+        return list_workspace_connectors(workspace_id)
+    except ServiceError as exc:
+        raise service_error_to_http(exc) from exc
+
+
+@router.patch("/{workspace_id}/connectors/{connector_id}", response_model=WorkspaceConnectorResponse)
+def update_connector_endpoint(
+    workspace_id: str,
+    connector_id: str,
+    payload: UpdateWorkspaceConnectorRequest,
+    user=Depends(require_authenticated_user),
+    _workspace=Depends(require_workspace_access),
+) -> dict:
+    try:
+        return update_workspace_connector(
+            workspace_id,
+            connector_id,
+            payload.enabled,
+            updated_by_user_id=user.user_id,
+        )
     except ServiceError as exc:
         raise service_error_to_http(exc) from exc
 

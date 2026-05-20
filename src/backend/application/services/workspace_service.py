@@ -19,10 +19,11 @@ from src.backend.application.services.exceptions import (
 from src.backend.config.settings import CLI_STATE_FILE, DATA_DIR, WORKSPACES_DIR
 from src.backend.infrastructure.database import session_scope
 from src.backend.infrastructure.ingestion.repo_manager import list_indexes
-from src.backend.infrastructure.models import User, Workspace, WorkspaceMember
+from src.backend.infrastructure.models import User, Workspace, WorkspaceConnector, WorkspaceMember
 from src.backend.infrastructure.retrieval.retriever import delete_index
 
 CLI_OWNER_ID = "local-cli"
+WORKSPACE_CONNECTOR_IDS = ("jira", "slack", "github", "confluence", "linear")
 
 
 def list_workspaces(
@@ -244,6 +245,62 @@ def remove_workspace_member(owner_id: str, workspace_id: str, email: str) -> dic
         public = _public_member(member, owner_id=owner_id)
         session.delete(member)
         return public
+
+
+def list_workspace_connectors(workspace_id: str) -> dict:
+    normalized_id = workspace_id.strip()
+    if not normalized_id:
+        raise ResourceNotFoundError("Workspace not found.")
+    with session_scope() as session:
+        workspace = session.get(Workspace, normalized_id)
+        if workspace is None:
+            raise ResourceNotFoundError("Workspace not found.")
+        rows = session.scalars(
+            select(WorkspaceConnector).where(WorkspaceConnector.workspace_id == normalized_id)
+        ).all()
+        enabled_by_id = {row.connector_id: bool(row.enabled) for row in rows}
+        return {
+            "connectors": [
+                {"connector_id": connector_id, "enabled": enabled_by_id.get(connector_id, False)}
+                for connector_id in WORKSPACE_CONNECTOR_IDS
+            ]
+        }
+
+
+def update_workspace_connector(
+    workspace_id: str,
+    connector_id: str,
+    enabled: bool,
+    updated_by_user_id: str | None = None,
+) -> dict:
+    normalized_workspace_id = workspace_id.strip()
+    normalized_connector_id = connector_id.strip().lower()
+    if normalized_connector_id not in WORKSPACE_CONNECTOR_IDS:
+        raise ValidationError("Unknown connector.")
+
+    with session_scope() as session:
+        workspace = session.get(Workspace, normalized_workspace_id)
+        if workspace is None:
+            raise ResourceNotFoundError("Workspace not found.")
+        connector = session.scalar(
+            select(WorkspaceConnector).where(
+                WorkspaceConnector.workspace_id == normalized_workspace_id,
+                WorkspaceConnector.connector_id == normalized_connector_id,
+            )
+        )
+        if connector is None:
+            connector = WorkspaceConnector(
+                workspace_id=normalized_workspace_id,
+                connector_id=normalized_connector_id,
+            )
+            session.add(connector)
+        connector.enabled = bool(enabled)
+        connector.updated_by_user_id = updated_by_user_id
+        session.flush()
+        return {
+            "connector_id": connector.connector_id,
+            "enabled": bool(connector.enabled),
+        }
 
 
 def user_can_access_workspace(user_id: str, user_email: str, workspace_id: str) -> bool:

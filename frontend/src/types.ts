@@ -75,6 +75,15 @@ export interface WorkspaceMembersResponse {
   members: WorkspaceMember[];
 }
 
+export interface WorkspaceConnector {
+  connector_id: string;
+  enabled: boolean;
+}
+
+export interface WorkspaceConnectorsResponse {
+  connectors: WorkspaceConnector[];
+}
+
 export interface HierarchyNode {
   node_id: string;
   workspace_id: string;

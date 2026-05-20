@@ -135,6 +135,70 @@ class HierarchyGraphApiTests(unittest.TestCase):
         delete = self.client.delete(self._graph_url(f"/nodes/{child['node']['node_id']}"))
         self.assertEqual(delete.status_code, 200)
 
+    def test_graph_visibility_is_scoped_by_user_hierarchy(self):
+        fourth_member = AuthUser("member-4", "fourth@example.com", "Fourth", "member")
+        fifth_member = AuthUser("member-5", "fifth@example.com", "Fifth", "member")
+        for member in (fourth_member, fifth_member):
+            workspace_service.add_workspace_member(
+                self.admin.user_id,
+                self.workspace["workspace_id"],
+                member.email,
+            )
+            upsert_authenticated_user(
+                GoogleIdentity(member.user_id, member.email, member.name),
+                role=member.role,
+            )
+
+        self._login_as(self.admin)
+        root = self._create_node("Admin", self.admin.user_id)
+        member_node = self._create_node("Member", self.member.user_id, root["node"]["node_id"])
+        sibling = self._create_node("Sibling", fifth_member.user_id, root["node"]["node_id"])
+        child = self._create_node("Child", self.other_member.user_id, member_node["node"]["node_id"])
+        grandchild = self._create_node("Grandchild", self.third_member.user_id, child["node"]["node_id"])
+        great_grandchild = self._create_node("Great grandchild", fourth_member.user_id, grandchild["node"]["node_id"])
+
+        admin_graph = self.client.get(self._graph_url("")).json()
+        self.assertEqual(len(admin_graph["nodes"]), 6)
+        self.assertEqual(len(admin_graph["connections"]), 5)
+
+        self._login_as(self.member)
+        member_graph = self.client.get(self._graph_url("")).json()
+        visible_node_ids = {node["node_id"] for node in member_graph["nodes"]}
+
+        self.assertEqual(
+            visible_node_ids,
+            {
+                root["node"]["node_id"],
+                member_node["node"]["node_id"],
+                child["node"]["node_id"],
+                grandchild["node"]["node_id"],
+            },
+        )
+        self.assertNotIn(sibling["node"]["node_id"], visible_node_ids)
+        self.assertNotIn(great_grandchild["node"]["node_id"], visible_node_ids)
+        self.assertEqual(
+            {
+                (connection["parent_node_id"], connection["child_node_id"])
+                for connection in member_graph["connections"]
+            },
+            {
+                (root["node"]["node_id"], member_node["node"]["node_id"]),
+                (member_node["node"]["node_id"], child["node"]["node_id"]),
+                (child["node"]["node_id"], grandchild["node"]["node_id"]),
+            },
+        )
+
+    def test_member_without_assigned_node_sees_empty_graph(self):
+        self._login_as(self.admin)
+        self._create_node("Admin", self.admin.user_id)
+
+        self._login_as(self.member)
+        graph = self.client.get(self._graph_url(""))
+
+        self.assertEqual(graph.status_code, 200)
+        self.assertEqual(graph.json()["nodes"], [])
+        self.assertEqual(graph.json()["connections"], [])
+
     def test_member_can_create_immediate_child_only_under_own_node(self):
         self._login_as(self.admin)
         root = self._create_node("Admin", self.admin.user_id)

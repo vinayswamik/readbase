@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import deque
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -22,7 +23,7 @@ from src.backend.infrastructure.models import (
 )
 
 
-def get_workspace_graph(workspace_id: str) -> dict:
+def get_workspace_graph(workspace_id: str, user: AuthUser) -> dict:
     with session_scope() as session:
         nodes = session.scalars(
             select(HierarchyNode)
@@ -35,9 +36,10 @@ def get_workspace_graph(workspace_id: str) -> dict:
             .order_by(HierarchyConnection.created_at.asc())
         ).all()
         users_by_id = _workspace_users_by_id(session, workspace_id)
+        visible_nodes, visible_connections = _visible_graph_for_user(nodes, connections, user)
         return {
-            "nodes": [_public_node(node, users_by_id) for node in nodes],
-            "connections": [_public_connection(connection) for connection in connections],
+            "nodes": [_public_node(node, users_by_id) for node in visible_nodes],
+            "connections": [_public_connection(connection) for connection in visible_connections],
             "assignable_users": list(users_by_id.values()),
         }
 
@@ -303,6 +305,50 @@ def _would_create_cycle(
                 descendants.add(next_child)
                 frontier.append(next_child)
     return False
+
+
+def _visible_graph_for_user(
+    nodes: list[HierarchyNode],
+    connections: list[HierarchyConnection],
+    user: AuthUser,
+) -> tuple[list[HierarchyNode], list[HierarchyConnection]]:
+    if user.role == "admin":
+        return nodes, connections
+
+    own_node = next((node for node in nodes if node.assigned_user_id == user.user_id), None)
+    if own_node is None:
+        return [], []
+
+    children_by_parent: dict[str, list[str]] = {}
+    parent_by_child: dict[str, str] = {}
+    for connection in connections:
+        children_by_parent.setdefault(connection.parent_node_id, []).append(connection.child_node_id)
+        parent_by_child[connection.child_node_id] = connection.parent_node_id
+
+    visible_node_ids = {own_node.node_id}
+    parent_id = parent_by_child.get(own_node.node_id)
+    if parent_id:
+        visible_node_ids.add(parent_id)
+
+    frontier = deque([(own_node.node_id, 0)])
+    while frontier:
+        parent_id, depth = frontier.popleft()
+        if depth >= 2:
+            continue
+        for child_id in children_by_parent.get(parent_id, []):
+            if child_id in visible_node_ids:
+                continue
+            visible_node_ids.add(child_id)
+            frontier.append((child_id, depth + 1))
+
+    visible_nodes = [node for node in nodes if node.node_id in visible_node_ids]
+    visible_connections = [
+        connection
+        for connection in connections
+        if connection.parent_node_id in visible_node_ids
+        and connection.child_node_id in visible_node_ids
+    ]
+    return visible_nodes, visible_connections
 
 
 def _get_node(session, workspace_id: str, node_id: str) -> HierarchyNode:

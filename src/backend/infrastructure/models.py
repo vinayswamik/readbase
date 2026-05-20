@@ -77,6 +77,30 @@ class WorkspaceMember(Base):
     workspace: Mapped[Workspace] = relationship("Workspace", back_populates="members")
 
 
+class WorkspaceConnector(Base):
+    __tablename__ = "workspace_connectors"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "connector_id", name="uq_workspace_connector"),
+    )
+
+    connector_row_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String(96),
+        ForeignKey("workspaces.workspace_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    connector_id: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    updated_by_user_id: Mapped[str | None] = mapped_column(String(255), ForeignKey("users.user_id"), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
+
+
 class HierarchyNode(Base):
     __tablename__ = "hierarchy_nodes"
     __table_args__ = (
