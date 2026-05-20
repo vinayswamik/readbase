@@ -23,7 +23,7 @@ class ReposResponse(BaseModel):
 
 
 class AskRequest(BaseModel):
-    repo_id: str
+    repo_id: str | None = None
     question: str
     top_k: int = DEFAULT_TOP_K
 
@@ -35,10 +35,17 @@ class SourceMatchResponse(BaseModel):
     start_line: int
     end_line: int
     text: str
+    source_type: str = "repo"
+    repo_id: str | None = None
+    repo_url: str | None = None
+    source_url: str | None = None
+    issue_key: str | None = None
+    channel_name: str | None = None
+    item_type: str | None = None
 
 
 class AskResponse(BaseModel):
-    repo_id: str
+    repo_id: str | None = None
     workspace_id: str | None = None
     question: str
     answer: str
@@ -71,23 +78,165 @@ class WorkspaceMemberResponse(BaseModel):
     user_id: str | None = None
     added_at: str
     is_owner: bool
+    connector_manager: bool = False
 
 
 class WorkspaceMembersResponse(BaseModel):
     members: list[WorkspaceMemberResponse]
 
 
-class WorkspaceConnectorResponse(BaseModel):
-    connector_id: str
-    enabled: bool
+class UpdateWorkspaceMemberConnectorManagerRequest(BaseModel):
+    connector_manager: bool
 
 
-class WorkspaceConnectorsResponse(BaseModel):
-    connectors: list[WorkspaceConnectorResponse]
+class JiraSiteResponse(BaseModel):
+    cloud_id: str
+    name: str
+    url: str
+    scopes: list[str] = []
+    avatar_url: str | None = None
 
 
-class UpdateWorkspaceConnectorRequest(BaseModel):
-    enabled: bool
+class JiraConnectionResponse(BaseModel):
+    connected: bool
+    account_id: str | None = None
+    account_email: str | None = None
+    account_name: str | None = None
+    scopes: list[str] = []
+    sites: list[JiraSiteResponse] = []
+
+
+class GithubConnectionResponse(BaseModel):
+    connected: bool
+    configured: bool = False
+    github_user_id: str | None = None
+    login: str | None = None
+    name: str | None = None
+    avatar_url: str | None = None
+    scopes: list[str] = []
+
+
+class GithubRepositoryResponse(BaseModel):
+    id: str
+    name: str
+    full_name: str
+    html_url: str
+    private: bool
+    description: str | None = None
+    owner_login: str | None = None
+    updated_at: str | None = None
+
+
+class GithubRepositoriesResponse(BaseModel):
+    repositories: list[GithubRepositoryResponse]
+
+
+class SlackTeamResponse(BaseModel):
+    team_id: str
+    team_name: str
+    team_domain: str | None = None
+    slack_user_id: str
+    scopes: list[str] = []
+
+
+class SlackConnectionResponse(BaseModel):
+    connected: bool
+    configured: bool = False
+    teams: list[SlackTeamResponse] = []
+
+
+class SlackChannelResponse(BaseModel):
+    team_id: str
+    team_name: str
+    team_domain: str | None = None
+    channel_id: str
+    channel_name: str
+    is_private: bool
+    is_archived: bool = False
+
+
+class SlackChannelsResponse(BaseModel):
+    channels: list[SlackChannelResponse]
+
+
+class AddWorkspaceSlackChannelRequest(BaseModel):
+    team_id: str
+    team_name: str
+    team_domain: str | None = None
+    channel_id: str
+    channel_name: str
+    is_private: bool = False
+
+
+class WorkspaceSlackSourceResponse(BaseModel):
+    source_id: str
+    workspace_id: str
+    team_id: str
+    team_name: str
+    team_domain: str | None = None
+    channel_id: str
+    channel_name: str
+    channel_is_private: bool
+    added_by_user_id: str
+    sync_owner_user_id: str
+    sync_status: str
+    sync_error: str | None = None
+    last_synced_at: str | None = None
+    last_message_ts: str | None = None
+    next_sync_at: str | None = None
+    created_at: str
+    updated_at: str
+    user_access: str = "unknown"
+
+
+class WorkspaceSlackSourcesResponse(BaseModel):
+    sources: list[WorkspaceSlackSourceResponse]
+
+
+class JiraProjectResponse(BaseModel):
+    cloud_id: str
+    site_name: str
+    site_url: str
+    project_id: str
+    project_key: str
+    project_name: str
+
+
+class JiraProjectsResponse(BaseModel):
+    projects: list[JiraProjectResponse]
+
+
+class AddWorkspaceJiraProjectRequest(BaseModel):
+    cloud_id: str
+    project_id: str
+    project_key: str
+    project_name: str
+    site_name: str
+    site_url: str
+
+
+class WorkspaceJiraSourceResponse(BaseModel):
+    source_id: str
+    workspace_id: str
+    cloud_id: str
+    site_name: str
+    site_url: str
+    project_id: str
+    project_key: str
+    project_name: str
+    added_by_user_id: str
+    sync_owner_user_id: str
+    sync_status: str
+    sync_error: str | None = None
+    last_synced_at: str | None = None
+    next_sync_at: str | None = None
+    created_at: str
+    updated_at: str
+    user_access: str = "unknown"
+
+
+class WorkspaceJiraSourcesResponse(BaseModel):
+    sources: list[WorkspaceJiraSourceResponse]
 
 
 class WorkspaceResponse(BaseModel):

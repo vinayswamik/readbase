@@ -14,16 +14,16 @@ from src.backend.config.settings import BASE_DIR
 ANTHROPIC_VERSION = "2023-06-01"
 ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages"
 SYSTEM_PROMPT = (
-    "You answer questions about a codebase using only the supplied retrieved snippets. "
-    "Be direct and cite files as path:start-end. If the snippets are insufficient, "
+    "You answer workspace questions using only the supplied retrieved snippets. "
+    "Be direct and cite sources as path:start-end. If the snippets are insufficient, "
     "say what is missing."
 )
 
 # Reject answers when retrieval confidence is too low (tune with on-repo vs off-topic questions).
 MIN_RELEVANCE_SCORE = 0.6
 OUT_OF_SCOPE_MESSAGE = (
-    "That question doesn't look related to this indexed repository. "
-    "Try asking about a file, function, class, or feature in the codebase."
+    "That question doesn't look related to the indexed workspace sources. "
+    "Try asking about connected repositories, Jira projects, or Slack channels."
 )
 
 
@@ -177,8 +177,8 @@ def extractive_answer(
 ) -> str:
     if not matches:
         return (
-            "I could not find relevant indexed code for that question. Try re-indexing "
-            "the repository or asking with a file, function, class, or feature name."
+            "I could not find relevant indexed workspace content for that question. "
+            "Try syncing the connected source or asking with a more specific name."
         )
 
     lines = [

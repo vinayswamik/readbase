@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -65,35 +66,14 @@ class WorkspaceApiTests(unittest.TestCase):
         self.assertEqual(other_response.status_code, 200)
         self.assertEqual(other_response.json()["workspaces"], [])
 
-    def test_workspace_connector_state_persists_for_workspace_member(self):
-        workspace = workspace_service.create_workspace(
-            "admin-1",
-            "Demo",
-            owner_email="admin@example.com",
-            owner_name="Admin",
-        )
-        workspace_service.add_workspace_member(
-            "admin-1",
-            workspace["workspace_id"],
-            "member@example.com",
-        )
+    def test_missing_slack_config_returns_400(self):
         self._login_as(AuthUser("member-1", "member@example.com", "Member", "member"))
 
-        update_response = self.client.patch(
-            f"/api/workspaces/{workspace['workspace_id']}/connectors/github",
-            json={"enabled": True},
-        )
-        list_response = self.client.get(f"/api/workspaces/{workspace['workspace_id']}/connectors")
+        with patch.dict("os.environ", {"SLACK_CLIENT_ID": "", "SLACK_CLIENT_SECRET": ""}):
+            response = self.client.get("/api/me/integrations/slack/start", follow_redirects=False)
 
-        self.assertEqual(update_response.status_code, 200)
-        self.assertEqual(update_response.json(), {"connector_id": "github", "enabled": True})
-        self.assertEqual(list_response.status_code, 200)
-        connector_state = {
-            connector["connector_id"]: connector["enabled"]
-            for connector in list_response.json()["connectors"]
-        }
-        self.assertTrue(connector_state["github"])
-        self.assertFalse(connector_state["slack"])
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["detail"], "SLACK_CLIENT_ID is not configured.")
 
     def _login_as(self, user: AuthUser) -> None:
         self.app.dependency_overrides[require_authenticated_user] = lambda: user

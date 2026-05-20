@@ -3,7 +3,8 @@ interface ApiErrorPayload {
   detail?: string | Array<{ msg?: string }>;
 }
 
-const REQUEST_TIMEOUT_MS = 6_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 12_000;
+const LONG_REQUEST_TIMEOUT_MS = 90_000;
 
 export async function postJson<TRequest, TResponse>(
   url: string,
@@ -15,7 +16,7 @@ export async function postJson<TRequest, TResponse>(
     credentials: "include",
     headers: hasBody ? { "Content-Type": "application/json" } : undefined,
     body: hasBody ? JSON.stringify(body) : undefined,
-  });
+  }, timeoutForUrl(url));
   return parseJsonResponse<TResponse>(response);
 }
 
@@ -28,12 +29,12 @@ export async function patchJson<TRequest, TResponse>(
     credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-  });
+  }, timeoutForUrl(url));
   return parseJsonResponse<TResponse>(response);
 }
 
 export async function fetchJson<TResponse>(url: string): Promise<TResponse> {
-  const response = await fetchWithTimeout(url, { credentials: "include" });
+  const response = await fetchWithTimeout(url, { credentials: "include" }, timeoutForUrl(url));
   return parseJsonResponse<TResponse>(response);
 }
 
@@ -41,7 +42,7 @@ export async function deleteJson<TResponse>(url: string): Promise<TResponse> {
   const response = await fetchWithTimeout(url, {
     method: "DELETE",
     credentials: "include",
-  });
+  }, timeoutForUrl(url));
   return parseJsonResponse<TResponse>(response);
 }
 
@@ -72,24 +73,38 @@ async function parseJsonResponse<TResponse>(
   return payload;
 }
 
-async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => {
     controller.abort();
-  }, REQUEST_TIMEOUT_MS);
+  }, timeoutMs);
 
   try {
     return await fetch(url, { ...init, signal: controller.signal });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new Error(
-        "Cannot reach backend right now. Start the server and refresh the page.",
+        timeoutMs >= LONG_REQUEST_TIMEOUT_MS
+          ? "The request is taking too long. Check the backend logs and try again."
+          : "Cannot reach backend right now. Start the server and refresh the page.",
       );
     }
     throw error;
   } finally {
     window.clearTimeout(timeoutId);
   }
+}
+
+function timeoutForUrl(url: string): number {
+  if (
+    url.includes("/ask") ||
+    url.includes("/index") ||
+    url.includes("/jira/sources") ||
+    url.includes("/slack/sources")
+  ) {
+    return LONG_REQUEST_TIMEOUT_MS;
+  }
+  return DEFAULT_REQUEST_TIMEOUT_MS;
 }
 
 function getApiErrorMessage(payload: ApiErrorPayload, status: number): string {

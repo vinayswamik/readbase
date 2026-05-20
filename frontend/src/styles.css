@@ -785,10 +785,10 @@ button {
 }
 
 .connector-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   min-height: 46px;
   border-top: 1px solid #e4e7ec;
   padding: 7px 0;
@@ -811,13 +811,13 @@ button {
   text-align: left;
 }
 
-.connector-open:hover:not(:disabled) {
-  color: var(--button);
+.connector-row.connector-open {
+  border-top: 1px solid #e4e7ec;
+  border-radius: 0;
 }
 
-.connector-open:disabled {
-  color: #667085;
-  cursor: default;
+.connector-open:hover {
+  color: var(--button);
 }
 
 .connector-open span:last-child {
@@ -841,41 +841,6 @@ button {
   height: 24px;
 }
 
-.connector-toggle {
-  position: relative;
-  width: 40px;
-  height: 24px;
-  border: 1px solid #d0d5dd;
-  border-radius: 999px;
-  background: #e4e7ec;
-  cursor: pointer;
-  padding: 0;
-}
-
-.connector-toggle span {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 16px;
-  height: 16px;
-  border-radius: 999px;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.2);
-  transition:
-    left 0.16s ease,
-    background 0.16s ease;
-}
-
-.connector-toggle.active {
-  border-color: #155eef;
-  background: #155eef;
-}
-
-.connector-toggle.active span {
-  left: 19px;
-}
-
-.connector-toggle:focus-visible,
 .connector-open:focus-visible {
   outline: 0;
   box-shadow: 0 0 0 4px var(--focus-ring);
@@ -1067,6 +1032,37 @@ button {
   padding: 0 12px;
 }
 
+.connector-account-row,
+.connector-search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.connector-account-row strong,
+.connector-account-row span {
+  display: block;
+}
+
+.connector-account-row span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: 3px;
+}
+
+.connector-search-row input {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  outline: none;
+  padding: 0 10px;
+}
+
 .connector-access-list {
   display: grid;
   gap: 8px;
@@ -1078,9 +1074,17 @@ button {
   padding: 12px;
 }
 
+.connector-access-list h3 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
 .connector-access-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 9px;
   min-height: 36px;
@@ -1088,6 +1092,12 @@ button {
   border-radius: 8px;
   background: #fff;
   padding: 7px 9px;
+}
+
+.compact-button {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
 }
 
 .connector-access-row input {

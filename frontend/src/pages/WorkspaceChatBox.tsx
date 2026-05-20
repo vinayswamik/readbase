@@ -28,7 +28,7 @@ export function WorkspaceChatBox({
       <header className="chat-overlay-header">
         <div>
           <h2>Ask</h2>
-          <p>{selectedRepo ? repoLabel(selectedRepo) : "Select a repository first"}</p>
+          <p>{selectedRepo ? repoLabel(selectedRepo) : "Workspace sources"}</p>
         </div>
         <button type="button" className="secondary-action-button" onClick={onClose}>
           Close
@@ -48,7 +48,7 @@ export function WorkspaceChatBox({
         <textarea
           rows={2}
           value={question}
-          placeholder={selectedRepo ? `Ask about ${repoLabel(selectedRepo)}` : "Select a repository first"}
+          placeholder={selectedRepo ? `Ask about ${repoLabel(selectedRepo)}` : "Ask across workspace sources"}
           required
           onChange={(event) => onQuestionChange(event.target.value)}
         />
@@ -84,6 +84,8 @@ function SourceList({ sources, mode }: { sources: SourceMatch[]; mode: string })
           className={`source${mode === "anthropic" ? " compact" : ""}`}
         >
           <div className="source-title">
+            {source.source_type === "jira" && source.issue_key ? `${source.issue_key} · ` : ""}
+            {source.source_type === "slack" && source.channel_name ? `#${source.channel_name} · ` : ""}
             {source.path}:{source.start_line}-{source.end_line} · score{" "}
             {formatScore(source.score)}
           </div>

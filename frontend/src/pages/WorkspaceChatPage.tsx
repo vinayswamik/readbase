@@ -13,16 +13,28 @@ import type {
   AuthUser,
   ChatMessage,
   CreateHierarchyNodeResponse,
+  GithubConnection,
+  GithubRepositoriesResponse,
+  GithubRepository,
   HierarchyAssignableUser,
   HierarchyConnection,
   HierarchyGraphResponse,
   HierarchyNode,
   IndexedRepo,
   IndexResponse,
+  JiraConnection,
+  JiraProject,
+  JiraProjectsResponse,
   ReposResponse,
+  SlackChannel,
+  SlackChannelsResponse,
+  SlackConnection,
   SourceMatch,
   Workspace,
-  WorkspaceConnectorsResponse,
+  WorkspaceJiraSource,
+  WorkspaceJiraSourcesResponse,
+  WorkspaceSlackSource,
+  WorkspaceSlackSourcesResponse,
   WorkspaceMember,
   WorkspaceMembersResponse,
 } from "../types";
@@ -77,21 +89,28 @@ export function WorkspaceChatPage({
   const [repoId, setRepoId] = useState<string | null>(null);
   const [repos, setRepos] = useState<IndexedRepo[]>([]);
   const [repoListError, setRepoListError] = useState<string | null>(null);
-  const [connectorEnabled, setConnectorEnabled] = useState<Record<ConnectorId, boolean>>({
-    jira: false,
-    slack: false,
-    github: false,
-    confluence: false,
-    linear: false,
-  });
   const [activeConnectorId, setActiveConnectorId] = useState<ConnectorId | null>(null);
   const [connectorRepoUrl, setConnectorRepoUrl] = useState("");
   const [connectorRefreshRepo, setConnectorRefreshRepo] = useState(false);
   const [connectorMembers, setConnectorMembers] = useState<WorkspaceMember[]>([]);
-  const [connectorAccessEmails, setConnectorAccessEmails] = useState<string[]>([]);
   const [connectorStatus, setConnectorStatus] = useState("");
   const [connectorError, setConnectorError] = useState<string | null>(null);
   const [connectorMembersLoading, setConnectorMembersLoading] = useState(false);
+  const [githubConnection, setGithubConnection] = useState<GithubConnection | null>(null);
+  const [githubRepositories, setGithubRepositories] = useState<GithubRepository[]>([]);
+  const [githubRepositoryQuery, setGithubRepositoryQuery] = useState("");
+  const [githubRepositoriesLoading, setGithubRepositoriesLoading] = useState(false);
+  const [jiraConnection, setJiraConnection] = useState<JiraConnection | null>(null);
+  const [jiraSources, setJiraSources] = useState<WorkspaceJiraSource[]>([]);
+  const [jiraProjects, setJiraProjects] = useState<JiraProject[]>([]);
+  const [jiraProjectQuery, setJiraProjectQuery] = useState("");
+  const [jiraLoading, setJiraLoading] = useState(false);
+  const [slackConnection, setSlackConnection] = useState<SlackConnection | null>(null);
+  const [slackSources, setSlackSources] = useState<WorkspaceSlackSource[]>([]);
+  const [slackChannels, setSlackChannels] = useState<SlackChannel[]>([]);
+  const [slackChannelQuery, setSlackChannelQuery] = useState("");
+  const [slackSelectedTeamId, setSlackSelectedTeamId] = useState("");
+  const [slackLoading, setSlackLoading] = useState(false);
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [mode, setMode] = useState("retrieval");
@@ -286,17 +305,6 @@ export function WorkspaceChatPage({
     }
   }, [handleApiError, workspace.workspace_id]);
 
-  const loadConnectorState = useCallback(async () => {
-    try {
-      const result = await fetchJson<WorkspaceConnectorsResponse>(
-        `/api/workspaces/${workspace.workspace_id}/connectors`,
-      );
-      setConnectorEnabled(connectorEnabledFromResponse(result));
-    } catch (error) {
-      handleApiError(error, setConnectorError);
-    }
-  }, [handleApiError, workspace.workspace_id]);
-
   const loadConnectorMembers = useCallback(async () => {
     setConnectorMembersLoading(true);
     setConnectorError(null);
@@ -304,21 +312,122 @@ export function WorkspaceChatPage({
       const result = await fetchJson<WorkspaceMembersResponse>(
         `/api/workspaces/${workspace.workspace_id}/members`,
       );
-      const members = result.members || [];
-      setConnectorMembers(members);
-      setConnectorAccessEmails((currentEmails) => {
-        const memberEmails = members.map((member) => member.email);
-        if (!currentEmails.length) {
-          return memberEmails;
-        }
-        return currentEmails.filter((email) => memberEmails.includes(email));
-      });
+      setConnectorMembers(result.members || []);
     } catch (error) {
       handleApiError(error, setConnectorError);
     } finally {
       setConnectorMembersLoading(false);
     }
   }, [handleApiError, workspace.workspace_id]);
+
+  const loadGithubConnection = useCallback(async () => {
+    try {
+      const result = await fetchJson<GithubConnection>("/api/me/integrations/github");
+      setGithubConnection(result);
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    }
+  }, [handleApiError]);
+
+  const loadGithubRepositories = useCallback(
+    async (query = "") => {
+      setGithubRepositoriesLoading(true);
+      try {
+        const params = query.trim() ? `?query=${encodeURIComponent(query.trim())}` : "";
+        const result = await fetchJson<GithubRepositoriesResponse>(`/api/me/integrations/github/repos${params}`);
+        setGithubRepositories(result.repositories || []);
+      } catch (error) {
+        handleApiError(error, setConnectorError);
+      } finally {
+        setGithubRepositoriesLoading(false);
+      }
+    },
+    [handleApiError],
+  );
+
+  const loadJiraConnection = useCallback(async () => {
+    try {
+      const result = await fetchJson<JiraConnection>("/api/me/integrations/jira");
+      setJiraConnection(result);
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    }
+  }, [handleApiError]);
+
+  const loadJiraSources = useCallback(async () => {
+    try {
+      const result = await fetchJson<WorkspaceJiraSourcesResponse>(
+        `/api/workspaces/${workspace.workspace_id}/jira/sources`,
+      );
+      setJiraSources(result.sources || []);
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    }
+  }, [handleApiError, workspace.workspace_id]);
+
+  const loadJiraProjects = useCallback(
+    async (query = "") => {
+      setJiraLoading(true);
+      try {
+        const params = query.trim() ? `?query=${encodeURIComponent(query.trim())}` : "";
+        const result = await fetchJson<JiraProjectsResponse>(
+          `/api/workspaces/${workspace.workspace_id}/jira/projects${params}`,
+        );
+        setJiraProjects(result.projects || []);
+      } catch (error) {
+        handleApiError(error, setConnectorError);
+      } finally {
+        setJiraLoading(false);
+      }
+    },
+    [handleApiError, workspace.workspace_id],
+  );
+
+  const loadSlackConnection = useCallback(async () => {
+    try {
+      const result = await fetchJson<SlackConnection>("/api/me/integrations/slack");
+      setSlackConnection(result);
+      setSlackSelectedTeamId((currentTeamId) => currentTeamId || result.teams?.[0]?.team_id || "");
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    }
+  }, [handleApiError]);
+
+  const loadSlackSources = useCallback(async () => {
+    try {
+      const result = await fetchJson<WorkspaceSlackSourcesResponse>(
+        `/api/workspaces/${workspace.workspace_id}/slack/sources`,
+      );
+      setSlackSources(result.sources || []);
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    }
+  }, [handleApiError, workspace.workspace_id]);
+
+  const loadSlackChannels = useCallback(
+    async (teamId: string, query = "") => {
+      if (!teamId) {
+        setSlackChannels([]);
+        return;
+      }
+      setSlackLoading(true);
+      try {
+        const params = new URLSearchParams({ team_id: teamId });
+        if (query.trim()) {
+          params.set("query", query.trim());
+        }
+        const result = await fetchJson<SlackChannelsResponse>(
+          `/api/me/integrations/slack/channels?${params.toString()}`,
+        );
+        setSlackChannels(result.channels || []);
+      } catch (error) {
+        handleApiError(error, setConnectorError);
+      } finally {
+        setSlackLoading(false);
+      }
+    },
+    [handleApiError],
+  );
 
   const queueGraphRefresh = useCallback(() => {
     if (queuedGraphRefreshRef.current !== null) {
@@ -333,14 +442,38 @@ export function WorkspaceChatPage({
   useEffect(() => {
     void loadRepos();
     void loadGraph();
-    void loadConnectorState();
-  }, [loadConnectorState, loadGraph, loadRepos]);
+    void loadGithubConnection();
+    void loadJiraConnection();
+    void loadJiraSources();
+    void loadSlackConnection();
+    void loadSlackSources();
+  }, [loadGithubConnection, loadGraph, loadJiraConnection, loadJiraSources, loadRepos, loadSlackConnection, loadSlackSources]);
 
   useEffect(() => {
     if (activeConnectorId) {
       void loadConnectorMembers();
     }
-  }, [activeConnectorId, loadConnectorMembers]);
+    if (activeConnectorId === "github") {
+      void loadGithubConnection();
+      if (githubConnection?.connected) {
+        void loadGithubRepositories(githubRepositoryQuery);
+      }
+    }
+    if (activeConnectorId === "jira") {
+      void loadJiraConnection();
+      void loadJiraSources();
+      if (jiraConnection?.connected) {
+        void loadJiraProjects(jiraProjectQuery);
+      }
+    }
+    if (activeConnectorId === "slack") {
+      void loadSlackConnection();
+      void loadSlackSources();
+      if (slackConnection?.connected && slackSelectedTeamId) {
+        void loadSlackChannels(slackSelectedTeamId, slackChannelQuery);
+      }
+    }
+  }, [activeConnectorId, githubConnection?.connected, githubRepositoryQuery, jiraConnection?.connected, jiraProjectQuery, loadConnectorMembers, loadGithubConnection, loadGithubRepositories, loadJiraConnection, loadJiraProjects, loadJiraSources, loadSlackChannels, loadSlackConnection, loadSlackSources, slackChannelQuery, slackConnection?.connected, slackSelectedTeamId]);
 
   useEffect(
     () => () => {
@@ -388,9 +521,6 @@ export function WorkspaceChatPage({
   }, [graphRevision, panelOpen]);
 
   function openConnectorModal(connectorId: ConnectorId) {
-    if (!connectorEnabled[connectorId]) {
-      return;
-    }
     setActiveConnectorId(connectorId);
     setConnectorStatus("");
     setConnectorError(null);
@@ -403,43 +533,6 @@ export function WorkspaceChatPage({
     setActiveConnectorId(null);
     setConnectorStatus("");
     setConnectorError(null);
-  }
-
-  async function handleConnectorToggle(connectorId: ConnectorId) {
-    const nextEnabled = !connectorEnabled[connectorId];
-    setConnectorEnabled((currentEnabled) => ({
-      ...currentEnabled,
-      [connectorId]: nextEnabled,
-    }));
-    if (!nextEnabled && activeConnectorId === connectorId) {
-      closeConnectorModal();
-    }
-    try {
-      const result = await patchJson<
-        { enabled: boolean },
-        { connector_id: string; enabled: boolean }
-      >(`/api/workspaces/${workspace.workspace_id}/connectors/${connectorId}`, {
-        enabled: nextEnabled,
-      });
-      setConnectorEnabled((currentEnabled) => ({
-        ...currentEnabled,
-        [connectorId]: result.enabled,
-      }));
-    } catch (error) {
-      setConnectorEnabled((currentEnabled) => ({
-        ...currentEnabled,
-        [connectorId]: !nextEnabled,
-      }));
-      handleApiError(error, setConnectorError);
-    }
-  }
-
-  function handleConnectorAccessToggle(email: string) {
-    setConnectorAccessEmails((currentEmails) =>
-      currentEmails.includes(email)
-        ? currentEmails.filter((currentEmail) => currentEmail !== email)
-        : [...currentEmails, email],
-    );
   }
 
   async function handleGithubConnectorSubmit(event: FormEvent<HTMLFormElement>) {
@@ -462,11 +555,7 @@ export function WorkspaceChatPage({
         refresh: connectorRefreshRepo,
       });
       setRepoId(result.repo_id);
-      setConnectorStatus(
-        `Repository indexed. ${connectorAccessEmails.length} workspace member${
-          connectorAccessEmails.length === 1 ? "" : "s"
-        } selected for access.`,
-      );
+      setConnectorStatus("Repository indexed. Answers will use it only for users with GitHub access.");
       await loadRepos(result.repo_id);
     } catch (error) {
       handleApiError(error, setConnectorError);
@@ -475,10 +564,185 @@ export function WorkspaceChatPage({
     }
   }
 
+  function handleGithubConnect() {
+    window.location.assign("/api/me/integrations/github/start");
+  }
+
+  async function handleGithubDisconnect() {
+    setIndexing(true);
+    setConnectorError(null);
+    try {
+      const result = await deleteJson<GithubConnection>("/api/me/integrations/github");
+      setGithubConnection(result);
+      setConnectorStatus("GitHub disconnected.");
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    } finally {
+      setIndexing(false);
+    }
+  }
+
+  function handleJiraConnect() {
+    window.location.assign("/api/me/integrations/jira/start");
+  }
+
+  async function handleJiraDisconnect() {
+    setJiraLoading(true);
+    setConnectorError(null);
+    try {
+      const result = await deleteJson<JiraConnection>("/api/me/integrations/jira");
+      setJiraConnection(result);
+      setJiraProjects([]);
+      setConnectorStatus("Jira disconnected.");
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    } finally {
+      setJiraLoading(false);
+    }
+  }
+
+  async function handleAddJiraProject(project: JiraProject) {
+    setJiraLoading(true);
+    setConnectorError(null);
+    try {
+      await postJson<JiraProject, WorkspaceJiraSource>(
+        `/api/workspaces/${workspace.workspace_id}/jira/sources`,
+        project,
+      );
+      setConnectorStatus(`${project.project_key} added to this workspace.`);
+      await loadJiraSources();
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    } finally {
+      setJiraLoading(false);
+    }
+  }
+
+  async function handleSyncJiraSource(sourceId: string) {
+    setJiraLoading(true);
+    setConnectorError(null);
+    try {
+      await postJson<undefined, WorkspaceJiraSource>(
+        `/api/workspaces/${workspace.workspace_id}/jira/sources/${sourceId}/sync`,
+      );
+      setConnectorStatus("Jira source synced.");
+      await loadJiraSources();
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+      await loadJiraSources();
+    } finally {
+      setJiraLoading(false);
+    }
+  }
+
+  async function handleRemoveJiraSource(sourceId: string) {
+    setJiraLoading(true);
+    setConnectorError(null);
+    try {
+      await deleteJson<WorkspaceJiraSource>(
+        `/api/workspaces/${workspace.workspace_id}/jira/sources/${sourceId}`,
+      );
+      setConnectorStatus("Jira source removed.");
+      await loadJiraSources();
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    } finally {
+      setJiraLoading(false);
+    }
+  }
+
+  function handleSlackConnect() {
+    window.location.assign("/api/me/integrations/slack/start");
+  }
+
+  async function handleSlackDisconnect(teamId?: string) {
+    setSlackLoading(true);
+    setConnectorError(null);
+    try {
+      const params = teamId ? `?team_id=${encodeURIComponent(teamId)}` : "";
+      const result = await deleteJson<SlackConnection>(`/api/me/integrations/slack${params}`);
+      setSlackConnection(result);
+      setSlackChannels([]);
+      setSlackSelectedTeamId(result.teams?.[0]?.team_id || "");
+      setConnectorStatus("Slack disconnected.");
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    } finally {
+      setSlackLoading(false);
+    }
+  }
+
+  async function handleAddSlackChannel(channel: SlackChannel) {
+    setSlackLoading(true);
+    setConnectorError(null);
+    try {
+      await postJson<SlackChannel, WorkspaceSlackSource>(
+        `/api/workspaces/${workspace.workspace_id}/slack/sources`,
+        channel,
+      );
+      setConnectorStatus(`#${channel.channel_name} added to this workspace.`);
+      await loadSlackSources();
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    } finally {
+      setSlackLoading(false);
+    }
+  }
+
+  async function handleSyncSlackSource(sourceId: string) {
+    setSlackLoading(true);
+    setConnectorError(null);
+    try {
+      await postJson<undefined, WorkspaceSlackSource>(
+        `/api/workspaces/${workspace.workspace_id}/slack/sources/${sourceId}/sync`,
+      );
+      setConnectorStatus("Slack source synced.");
+      await loadSlackSources();
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+      await loadSlackSources();
+    } finally {
+      setSlackLoading(false);
+    }
+  }
+
+  async function handleRemoveSlackSource(sourceId: string) {
+    setSlackLoading(true);
+    setConnectorError(null);
+    try {
+      await deleteJson<WorkspaceSlackSource>(
+        `/api/workspaces/${workspace.workspace_id}/slack/sources/${sourceId}`,
+      );
+      setConnectorStatus("Slack source removed.");
+      await loadSlackSources();
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    } finally {
+      setSlackLoading(false);
+    }
+  }
+
+  async function handleConnectorManagerToggle(member: WorkspaceMember) {
+    setConnectorError(null);
+    try {
+      const updated = await patchJson<{ connector_manager: boolean }, WorkspaceMember>(
+        `/api/workspaces/${workspace.workspace_id}/members/${encodeURIComponent(member.email)}/connector-manager`,
+        { connector_manager: !member.connector_manager },
+      );
+      setConnectorMembers((currentMembers) =>
+        currentMembers.map((currentMember) =>
+          currentMember.email === updated.email ? updated : currentMember,
+        ),
+      );
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    }
+  }
+
   async function handleAskSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmedQuestion = question.trim();
-    if (!trimmedQuestion || !repoId) {
+    if (!trimmedQuestion) {
       return;
     }
 
@@ -492,10 +756,10 @@ export function WorkspaceChatPage({
 
     try {
       const result = await postJson<
-        { repo_id: string; question: string; top_k: number },
+        { repo_id?: string; question: string; top_k: number },
         AskResponse
       >(`/api/workspaces/${workspace.workspace_id}/ask`, {
-        repo_id: repoId,
+        repo_id: repoId || undefined,
         question: trimmedQuestion,
         top_k: 8,
       });
@@ -770,7 +1034,7 @@ export function WorkspaceChatPage({
     }));
   }
 
-  const canAsk = Boolean(repoId && question.trim() && !asking);
+  const canAsk = Boolean(question.trim() && !asking);
   return (
     <section className={`graph-workspace${panelOpen ? " panel-open" : " panel-closed"}`}>
       <WorkspaceLeftPanel
@@ -794,7 +1058,6 @@ export function WorkspaceChatPage({
         canDeleteSelectedNode={canDeleteSelectedNode}
         reparentNodeId={reparentNodeId}
         reparentOptions={reparentOptions}
-        connectorEnabled={connectorEnabled}
         onBack={onBack}
         onSidebarTabChange={setSidebarTab}
         onRepoSelect={handleRepoSelect}
@@ -806,7 +1069,6 @@ export function WorkspaceChatPage({
         onReparentNodeIdChange={setReparentNodeId}
         onReparentSelectedNode={handleReparentSelectedNode}
         onOpenConnector={openConnectorModal}
-        onToggleConnector={handleConnectorToggle}
       />
 
       <WorkspaceGraphCanvas
@@ -850,15 +1112,49 @@ export function WorkspaceChatPage({
           repoUrl={connectorRepoUrl}
           refreshRepo={connectorRefreshRepo}
           members={connectorMembers}
-          accessEmails={connectorAccessEmails}
           loadingMembers={connectorMembersLoading}
           indexing={indexing}
           status={connectorStatus}
           error={connectorError}
+          githubConnection={githubConnection}
+          githubRepositories={githubRepositories}
+          githubRepositoryQuery={githubRepositoryQuery}
+          githubRepositoriesLoading={githubRepositoriesLoading}
+          jiraConnection={jiraConnection}
+          jiraSources={jiraSources}
+          jiraProjects={jiraProjects}
+          jiraProjectQuery={jiraProjectQuery}
+          jiraLoading={jiraLoading}
+          slackConnection={slackConnection}
+          slackSources={slackSources}
+          slackChannels={slackChannels}
+          slackChannelQuery={slackChannelQuery}
+          slackSelectedTeamId={slackSelectedTeamId}
+          slackLoading={slackLoading}
+          canManageWorkspace={workspace.can_manage}
           onRepoUrlChange={setConnectorRepoUrl}
+          onGithubRepositoryQueryChange={setGithubRepositoryQuery}
+          onGithubRepositorySearch={() => loadGithubRepositories(githubRepositoryQuery)}
           onRefreshRepoChange={setConnectorRefreshRepo}
-          onAccessToggle={handleConnectorAccessToggle}
           onSubmit={handleGithubConnectorSubmit}
+          onGithubConnect={handleGithubConnect}
+          onGithubDisconnect={handleGithubDisconnect}
+          onJiraConnect={handleJiraConnect}
+          onJiraDisconnect={handleJiraDisconnect}
+          onJiraProjectQueryChange={setJiraProjectQuery}
+          onJiraProjectSearch={() => loadJiraProjects(jiraProjectQuery)}
+          onAddJiraProject={handleAddJiraProject}
+          onSyncJiraSource={handleSyncJiraSource}
+          onRemoveJiraSource={handleRemoveJiraSource}
+          onSlackConnect={handleSlackConnect}
+          onSlackDisconnect={handleSlackDisconnect}
+          onSlackTeamChange={setSlackSelectedTeamId}
+          onSlackChannelQueryChange={setSlackChannelQuery}
+          onSlackChannelSearch={() => loadSlackChannels(slackSelectedTeamId, slackChannelQuery)}
+          onAddSlackChannel={handleAddSlackChannel}
+          onSyncSlackSource={handleSyncSlackSource}
+          onRemoveSlackSource={handleRemoveSlackSource}
+          onConnectorManagerToggle={handleConnectorManagerToggle}
           onClose={closeConnectorModal}
         />
       ) : null}
@@ -941,24 +1237,6 @@ function findParentNodeId(
     return "";
   }
   return connections.find((connection) => connection.child_node_id === nodeId)?.parent_node_id ?? "";
-}
-
-function connectorEnabledFromResponse(
-  response: WorkspaceConnectorsResponse,
-): Record<ConnectorId, boolean> {
-  const enabled = CONNECTORS.reduce(
-    (currentEnabled, connector) => ({
-      ...currentEnabled,
-      [connector.id]: false,
-    }),
-    {} as Record<ConnectorId, boolean>,
-  );
-  for (const connector of response.connectors || []) {
-    if (connector.connector_id in enabled) {
-      enabled[connector.connector_id as ConnectorId] = Boolean(connector.enabled);
-    }
-  }
-  return enabled;
 }
 
 function clamp(value: number, min: number, max: number): number {

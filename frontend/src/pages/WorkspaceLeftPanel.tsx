@@ -3,10 +3,18 @@ import type { FormEvent } from "react";
 
 import type {
   AuthUser,
+  GithubConnection,
+  GithubRepository,
   HierarchyAssignableUser,
   HierarchyNode,
   IndexedRepo,
+  JiraConnection,
+  JiraProject,
+  SlackChannel,
+  SlackConnection,
   Workspace,
+  WorkspaceJiraSource,
+  WorkspaceSlackSource,
   WorkspaceMember,
 } from "../types";
 
@@ -55,7 +63,6 @@ export function WorkspaceLeftPanel({
   canDeleteSelectedNode,
   reparentNodeId,
   reparentOptions,
-  connectorEnabled,
   onBack,
   onSidebarTabChange,
   onRepoSelect,
@@ -67,7 +74,6 @@ export function WorkspaceLeftPanel({
   onReparentNodeIdChange,
   onReparentSelectedNode,
   onOpenConnector,
-  onToggleConnector,
 }: {
   workspace: Workspace;
   mode: string;
@@ -89,7 +95,6 @@ export function WorkspaceLeftPanel({
   canDeleteSelectedNode: boolean;
   reparentNodeId: string;
   reparentOptions: HierarchyNode[];
-  connectorEnabled: Record<ConnectorId, boolean>;
   onBack: () => void;
   onSidebarTabChange: (tab: SidebarTab) => void;
   onRepoSelect: (repo: IndexedRepo) => void;
@@ -101,7 +106,6 @@ export function WorkspaceLeftPanel({
   onReparentNodeIdChange: (nodeId: string) => void;
   onReparentSelectedNode: (event: FormEvent<HTMLFormElement>) => void;
   onOpenConnector: (connectorId: ConnectorId) => void;
-  onToggleConnector: (connectorId: ConnectorId) => void;
 }) {
   return (
     <aside className="graph-sidebar" aria-label="Workspace controls">
@@ -120,9 +124,7 @@ export function WorkspaceLeftPanel({
 
       <ConnectorPanel
         connectors={CONNECTORS}
-        enabled={connectorEnabled}
         onOpen={onOpenConnector}
-        onToggle={onToggleConnector}
       />
 
       <div className="control-tabs" role="tablist" aria-label="Workspace control sections">
@@ -291,33 +293,103 @@ export function ConnectorSetupModal({
   repoUrl,
   refreshRepo,
   members,
-  accessEmails,
   loadingMembers,
   indexing,
   status,
   error,
+  githubConnection,
+  githubRepositories,
+  githubRepositoryQuery,
+  githubRepositoriesLoading,
+  jiraConnection,
+  jiraSources,
+  jiraProjects,
+  jiraProjectQuery,
+  jiraLoading,
+  slackConnection,
+  slackSources,
+  slackChannels,
+  slackChannelQuery,
+  slackSelectedTeamId,
+  slackLoading,
+  canManageWorkspace,
   onRepoUrlChange,
+  onGithubRepositoryQueryChange,
+  onGithubRepositorySearch,
   onRefreshRepoChange,
-  onAccessToggle,
   onSubmit,
+  onGithubConnect,
+  onGithubDisconnect,
+  onJiraConnect,
+  onJiraDisconnect,
+  onJiraProjectQueryChange,
+  onJiraProjectSearch,
+  onAddJiraProject,
+  onSyncJiraSource,
+  onRemoveJiraSource,
+  onSlackConnect,
+  onSlackDisconnect,
+  onSlackTeamChange,
+  onSlackChannelQueryChange,
+  onSlackChannelSearch,
+  onAddSlackChannel,
+  onSyncSlackSource,
+  onRemoveSlackSource,
+  onConnectorManagerToggle,
   onClose,
 }: {
   connector: ConnectorConfig;
   repoUrl: string;
   refreshRepo: boolean;
   members: WorkspaceMember[];
-  accessEmails: string[];
   loadingMembers: boolean;
   indexing: boolean;
   status: string;
   error: string | null;
+  githubConnection: GithubConnection | null;
+  githubRepositories: GithubRepository[];
+  githubRepositoryQuery: string;
+  githubRepositoriesLoading: boolean;
+  jiraConnection: JiraConnection | null;
+  jiraSources: WorkspaceJiraSource[];
+  jiraProjects: JiraProject[];
+  jiraProjectQuery: string;
+  jiraLoading: boolean;
+  slackConnection: SlackConnection | null;
+  slackSources: WorkspaceSlackSource[];
+  slackChannels: SlackChannel[];
+  slackChannelQuery: string;
+  slackSelectedTeamId: string;
+  slackLoading: boolean;
+  canManageWorkspace: boolean;
   onRepoUrlChange: (repoUrl: string) => void;
+  onGithubRepositoryQueryChange: (query: string) => void;
+  onGithubRepositorySearch: () => void;
   onRefreshRepoChange: (refreshRepo: boolean) => void;
-  onAccessToggle: (email: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onGithubConnect: () => void;
+  onGithubDisconnect: () => void;
+  onJiraConnect: () => void;
+  onJiraDisconnect: () => void;
+  onJiraProjectQueryChange: (query: string) => void;
+  onJiraProjectSearch: () => void;
+  onAddJiraProject: (project: JiraProject) => void;
+  onSyncJiraSource: (sourceId: string) => void;
+  onRemoveJiraSource: (sourceId: string) => void;
+  onSlackConnect: () => void;
+  onSlackDisconnect: (teamId?: string) => void;
+  onSlackTeamChange: (teamId: string) => void;
+  onSlackChannelQueryChange: (query: string) => void;
+  onSlackChannelSearch: () => void;
+  onAddSlackChannel: (channel: SlackChannel) => void;
+  onSyncSlackSource: (sourceId: string) => void;
+  onRemoveSlackSource: (sourceId: string) => void;
+  onConnectorManagerToggle: (member: WorkspaceMember) => void;
   onClose: () => void;
 }) {
   const isGithub = connector.id === "github";
+  const isJira = connector.id === "jira";
+  const isSlack = connector.id === "slack";
 
   return (
     <div
@@ -345,6 +417,77 @@ export function ConnectorSetupModal({
 
         {isGithub ? (
           <form className="connector-modal-body" onSubmit={onSubmit}>
+            <div className="connector-account-row">
+              <div>
+                <strong>{githubConnection?.connected ? githubConnection.login || "GitHub connected" : "GitHub account"}</strong>
+                <span>
+                  {githubConnection?.connected
+                    ? githubConnection.name || "Repository answers are filtered by this GitHub account."
+                    : githubConnection?.configured === false
+                      ? "GitHub OAuth is not configured on the backend."
+                    : "Connect GitHub before indexing or answering from GitHub repositories."}
+                </span>
+              </div>
+              {githubConnection?.connected ? (
+                <button type="button" className="secondary-action-button" disabled={indexing} onClick={onGithubDisconnect}>
+                  Disconnect
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={indexing || githubConnection?.configured === false}
+                  onClick={onGithubConnect}
+                >
+                  Connect GitHub
+                </button>
+              )}
+            </div>
+
+            {githubConnection?.connected ? (
+              <>
+                <div className="connector-search-row">
+                  <input
+                    value={githubRepositoryQuery}
+                    placeholder="Search GitHub repositories"
+                    onChange={(event) => onGithubRepositoryQueryChange(event.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="secondary-action-button"
+                    disabled={githubRepositoriesLoading}
+                    onClick={onGithubRepositorySearch}
+                  >
+                    Search
+                  </button>
+                </div>
+
+                <section className="connector-access-list">
+                  <h3>Available repositories</h3>
+                  {githubRepositoriesLoading && !githubRepositories.length ? (
+                    <div className="status-text compact">Loading GitHub repositories...</div>
+                  ) : null}
+                  {!githubRepositoriesLoading && !githubRepositories.length ? (
+                    <div className="status-text compact">No visible GitHub repositories found.</div>
+                  ) : null}
+                  {githubRepositories.slice(0, 8).map((repository) => (
+                    <div className="connector-access-row" key={repository.id || repository.full_name}>
+                      <span>{repository.full_name}</span>
+                      <strong>{repository.private ? "Private" : "Public"}</strong>
+                      <button
+                        type="button"
+                        className="secondary-action-button compact-button"
+                        disabled={indexing}
+                        onClick={() => onRepoUrlChange(repository.html_url)}
+                      >
+                        Select
+                      </button>
+                    </div>
+                  ))}
+                </section>
+              </>
+            ) : null}
+
             <label htmlFor="connectorRepoUrl">Git repo to index</label>
             <input
               id="connectorRepoUrl"
@@ -363,24 +506,22 @@ export function ConnectorSetupModal({
               <span>Re-clone existing index</span>
             </label>
 
-            <fieldset className="connector-access-list">
-              <legend>Workspace access</legend>
+            <section className="connector-access-list">
+              <h3>Connector managers</h3>
               {loadingMembers ? <div className="status-text compact">Loading workspace users...</div> : null}
-              {!loadingMembers && !members.length ? (
-                <div className="status-text compact">No workspace users found.</div>
-              ) : null}
               {members.map((member) => (
                 <label className="connector-access-row" key={member.email}>
                   <input
                     type="checkbox"
-                    checked={accessEmails.includes(member.email)}
-                    onChange={() => onAccessToggle(member.email)}
+                    checked={member.connector_manager}
+                    disabled={!canManageWorkspace || member.is_owner}
+                    onChange={() => onConnectorManagerToggle(member)}
                   />
                   <span>{member.email}</span>
-                  {member.is_owner ? <strong>Owner</strong> : null}
+                  <strong>{member.is_owner ? "Owner" : member.connector_manager ? "Manager" : "Member"}</strong>
                 </label>
               ))}
-            </fieldset>
+            </section>
 
             {error ? <div className="status-text error-text">{error}</div> : null}
             {status ? <div className="status-text">{status}</div> : null}
@@ -388,11 +529,250 @@ export function ConnectorSetupModal({
               <button type="button" className="secondary-action-button" onClick={onClose}>
                 Cancel
               </button>
-              <button type="submit" className="primary-button" disabled={indexing || !repoUrl.trim()}>
+              <button type="submit" className="primary-button" disabled={indexing || !repoUrl.trim() || !githubConnection?.connected}>
                 {indexing ? "Indexing..." : "Index repo"}
               </button>
             </div>
           </form>
+        ) : isJira ? (
+          <div className="connector-modal-body">
+            <div className="connector-account-row">
+              <div>
+                <strong>{jiraConnection?.connected ? jiraConnection.account_name || "Jira connected" : "Jira account"}</strong>
+                <span>
+                  {jiraConnection?.connected
+                    ? jiraConnection.account_email || `${jiraConnection.sites.length} site${jiraConnection.sites.length === 1 ? "" : "s"} connected`
+                    : "Connect your Atlassian account before adding workspace projects."}
+                </span>
+              </div>
+              {jiraConnection?.connected ? (
+                <button type="button" className="secondary-action-button" disabled={jiraLoading} onClick={onJiraDisconnect}>
+                  Disconnect
+                </button>
+              ) : (
+                <button type="button" className="primary-button" disabled={jiraLoading} onClick={onJiraConnect}>
+                  Connect Jira
+                </button>
+              )}
+            </div>
+
+            {jiraConnection?.connected ? (
+              <>
+                <div className="connector-search-row">
+                  <input
+                    value={jiraProjectQuery}
+                    placeholder="Search Jira projects"
+                    onChange={(event) => onJiraProjectQueryChange(event.target.value)}
+                  />
+                  <button type="button" className="secondary-action-button" disabled={jiraLoading} onClick={onJiraProjectSearch}>
+                    Search
+                  </button>
+                </div>
+
+                <section className="connector-access-list">
+                  <h3>Available projects</h3>
+                  {jiraLoading && !jiraProjects.length ? <div className="status-text compact">Loading Jira projects...</div> : null}
+                  {!jiraLoading && !jiraProjects.length ? <div className="status-text compact">No visible Jira projects found.</div> : null}
+                  {jiraProjects.slice(0, 8).map((project) => {
+                    const alreadyAdded = jiraSources.some(
+                      (source) => source.cloud_id === project.cloud_id && source.project_id === project.project_id,
+                    );
+                    return (
+                      <div className="connector-access-row" key={`${project.cloud_id}:${project.project_id}`}>
+                        <span>{project.project_key} · {project.project_name}</span>
+                        <strong>{project.site_name}</strong>
+                        <button
+                          type="button"
+                          className="secondary-action-button compact-button"
+                          disabled={jiraLoading || alreadyAdded}
+                          onClick={() => onAddJiraProject(project)}
+                        >
+                          {alreadyAdded ? "Added" : "Add"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </section>
+
+                <section className="connector-access-list">
+                  <h3>Connector managers</h3>
+                  {loadingMembers ? <div className="status-text compact">Loading workspace users...</div> : null}
+                  {members.map((member) => (
+                    <label className="connector-access-row" key={member.email}>
+                      <input
+                        type="checkbox"
+                        checked={member.connector_manager}
+                        disabled={!canManageWorkspace || member.is_owner}
+                        onChange={() => onConnectorManagerToggle(member)}
+                      />
+                      <span>{member.email}</span>
+                      <strong>{member.is_owner ? "Owner" : member.connector_manager ? "Manager" : "Member"}</strong>
+                    </label>
+                  ))}
+                </section>
+
+                <section className="connector-access-list">
+                  <h3>Workspace Jira sources</h3>
+                  {!jiraSources.length ? <div className="status-text compact">No Jira projects connected to this workspace.</div> : null}
+                  {jiraSources.map((source) => (
+                    <div className="connector-access-row" key={source.source_id}>
+                      <span>{source.project_key} · {source.project_name}</span>
+                      <strong>{source.sync_status}</strong>
+                      <button
+                        type="button"
+                        className="secondary-action-button compact-button"
+                        disabled={jiraLoading}
+                        onClick={() => onSyncJiraSource(source.source_id)}
+                      >
+                        Sync
+                      </button>
+                      <button
+                        type="button"
+                        className="danger-button compact-button"
+                        disabled={jiraLoading}
+                        onClick={() => onRemoveJiraSource(source.source_id)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </section>
+              </>
+            ) : null}
+
+            {error ? <div className="status-text error-text">{error}</div> : null}
+            {status ? <div className="status-text">{status}</div> : null}
+            <div className="connector-modal-actions">
+              <button type="button" className="primary-button" onClick={onClose}>
+                Done
+              </button>
+            </div>
+          </div>
+        ) : isSlack ? (
+          <div className="connector-modal-body">
+            <div className="connector-account-row">
+              <div>
+                <strong>{slackConnection?.connected ? "Slack connected" : "Slack account"}</strong>
+                <span>
+                  {slackConnection?.connected
+                    ? `${slackConnection.teams.length} workspace${slackConnection.teams.length === 1 ? "" : "s"} connected`
+                    : slackConnection?.configured === false
+                      ? "Slack OAuth is not configured on the backend."
+                    : "Connect Slack before adding workspace channels."}
+                </span>
+              </div>
+              <button
+                type="button"
+                className={slackConnection?.connected ? "secondary-action-button" : "primary-button"}
+                disabled={slackLoading || slackConnection?.configured === false}
+                onClick={slackConnection?.connected ? () => onSlackDisconnect(slackSelectedTeamId || undefined) : onSlackConnect}
+              >
+                {slackConnection?.connected ? "Disconnect" : "Connect Slack"}
+              </button>
+            </div>
+
+            {slackConnection?.connected ? (
+              <>
+                <div className="connector-search-row">
+                  <select
+                    value={slackSelectedTeamId}
+                    onChange={(event) => onSlackTeamChange(event.target.value)}
+                  >
+                    {slackConnection.teams.map((team) => (
+                      <option key={team.team_id} value={team.team_id}>
+                        {team.team_name}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    value={slackChannelQuery}
+                    placeholder="Search Slack channels"
+                    onChange={(event) => onSlackChannelQueryChange(event.target.value)}
+                  />
+                  <button type="button" className="secondary-action-button" disabled={slackLoading} onClick={onSlackChannelSearch}>
+                    Search
+                  </button>
+                </div>
+
+                <section className="connector-access-list">
+                  <h3>Available channels</h3>
+                  {slackLoading && !slackChannels.length ? <div className="status-text compact">Loading Slack channels...</div> : null}
+                  {!slackLoading && !slackChannels.length ? <div className="status-text compact">No visible Slack channels found.</div> : null}
+                  {slackChannels.slice(0, 8).map((channel) => {
+                    const alreadyAdded = slackSources.some(
+                      (source) => source.team_id === channel.team_id && source.channel_id === channel.channel_id,
+                    );
+                    return (
+                      <div className="connector-access-row" key={`${channel.team_id}:${channel.channel_id}`}>
+                        <span>#{channel.channel_name}</span>
+                        <strong>{channel.is_private ? "Private" : "Public"}</strong>
+                        <button
+                          type="button"
+                          className="secondary-action-button compact-button"
+                          disabled={slackLoading || alreadyAdded}
+                          onClick={() => onAddSlackChannel(channel)}
+                        >
+                          {alreadyAdded ? "Added" : "Add"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </section>
+
+                <section className="connector-access-list">
+                  <h3>Connector managers</h3>
+                  {loadingMembers ? <div className="status-text compact">Loading workspace users...</div> : null}
+                  {members.map((member) => (
+                    <label className="connector-access-row" key={member.email}>
+                      <input
+                        type="checkbox"
+                        checked={member.connector_manager}
+                        disabled={!canManageWorkspace || member.is_owner}
+                        onChange={() => onConnectorManagerToggle(member)}
+                      />
+                      <span>{member.email}</span>
+                      <strong>{member.is_owner ? "Owner" : member.connector_manager ? "Manager" : "Member"}</strong>
+                    </label>
+                  ))}
+                </section>
+
+                <section className="connector-access-list">
+                  <h3>Workspace Slack sources</h3>
+                  {!slackSources.length ? <div className="status-text compact">No Slack channels connected to this workspace.</div> : null}
+                  {slackSources.map((source) => (
+                    <div className="connector-access-row" key={source.source_id}>
+                      <span>#{source.channel_name}</span>
+                      <strong>{source.sync_status}</strong>
+                      <button
+                        type="button"
+                        className="secondary-action-button compact-button"
+                        disabled={slackLoading}
+                        onClick={() => onSyncSlackSource(source.source_id)}
+                      >
+                        Sync
+                      </button>
+                      <button
+                        type="button"
+                        className="danger-button compact-button"
+                        disabled={slackLoading}
+                        onClick={() => onRemoveSlackSource(source.source_id)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </section>
+              </>
+            ) : null}
+
+            {error ? <div className="status-text error-text">{error}</div> : null}
+            {status ? <div className="status-text">{status}</div> : null}
+            <div className="connector-modal-actions">
+              <button type="button" className="primary-button" onClick={onClose}>
+                Done
+              </button>
+            </div>
+          </div>
         ) : (
           <div className="connector-modal-body">
             <div className="empty-panel-state">
@@ -412,14 +792,10 @@ export function ConnectorSetupModal({
 
 function ConnectorPanel({
   connectors,
-  enabled,
   onOpen,
-  onToggle,
 }: {
   connectors: ConnectorConfig[];
-  enabled: Record<ConnectorId, boolean>;
   onOpen: (connectorId: ConnectorId) => void;
-  onToggle: (connectorId: ConnectorId) => void;
 }) {
   const [open, setOpen] = useState(true);
 
@@ -439,32 +815,17 @@ function ConnectorPanel({
       </button>
       {open ? (
         <div className="connector-list" id="connector-list">
-          {connectors.map((connector) => {
-            const isEnabled = enabled[connector.id];
-            return (
-              <div className="connector-row" key={connector.id}>
-                <button
-                  type="button"
-                  className="connector-open"
-                  disabled={!isEnabled}
-                  onClick={() => onOpen(connector.id)}
-                >
-                  <ConnectorLogo connectorId={connector.id} />
-                  <span>{connector.name}</span>
-                </button>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={isEnabled}
-                  aria-label={`${isEnabled ? "Disable" : "Enable"} ${connector.name}`}
-                  className={`connector-toggle${isEnabled ? " active" : ""}`}
-                  onClick={() => onToggle(connector.id)}
-                >
-                  <span />
-                </button>
-              </div>
-            );
-          })}
+          {connectors.map((connector) => (
+            <button
+              type="button"
+              className="connector-row connector-open"
+              key={connector.id}
+              onClick={() => onOpen(connector.id)}
+            >
+              <ConnectorLogo connectorId={connector.id} />
+              <span>{connector.name}</span>
+            </button>
+          ))}
         </div>
       ) : null}
     </section>
