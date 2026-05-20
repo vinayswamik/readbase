@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.backend.infrastructure.database import Base
@@ -73,8 +73,256 @@ class WorkspaceMember(Base):
     member_email_key: Mapped[str] = mapped_column(String(320), nullable=False, index=True)
     added_by_user_id: Mapped[str | None] = mapped_column(String(255), ForeignKey("users.user_id"), nullable=True)
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    connector_manager: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     workspace: Mapped[Workspace] = relationship("Workspace", back_populates="members")
+
+
+class JiraUserConnection(Base):
+    __tablename__ = "jira_user_connections"
+
+    connection_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    atlassian_account_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    account_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    account_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    access_token_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    refresh_token_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    scopes: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    connected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
+
+
+class JiraUserSite(Base):
+    __tablename__ = "jira_user_sites"
+    __table_args__ = (
+        UniqueConstraint("user_id", "cloud_id", name="uq_jira_user_site"),
+    )
+
+    site_row_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, index=True)
+    cloud_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    site_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    site_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    scopes: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    avatar_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
+
+
+class WorkspaceJiraSource(Base):
+    __tablename__ = "workspace_jira_sources"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "cloud_id", "project_id", name="uq_workspace_jira_project"),
+    )
+
+    source_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String(96),
+        ForeignKey("workspaces.workspace_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    cloud_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    site_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    site_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    project_id: Mapped[str] = mapped_column(String(96), nullable=False, index=True)
+    project_key: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    project_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    added_by_user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.user_id"), nullable=False, index=True)
+    sync_owner_user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.user_id"), nullable=False, index=True)
+    sync_status: Mapped[str] = mapped_column(String(32), default="idle", nullable=False)
+    sync_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
+
+
+class JiraIndexedItem(Base):
+    __tablename__ = "jira_indexed_items"
+    __table_args__ = (
+        UniqueConstraint("source_id", "item_type", "item_id", name="uq_jira_indexed_item"),
+    )
+
+    item_row_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source_id: Mapped[str] = mapped_column(
+        String(96),
+        ForeignKey("workspace_jira_sources.source_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    workspace_id: Mapped[str] = mapped_column(String(96), nullable=False, index=True)
+    cloud_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    project_id: Mapped[str] = mapped_column(String(96), nullable=False, index=True)
+    project_key: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    issue_id: Mapped[str] = mapped_column(String(96), nullable=False, index=True)
+    issue_key: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    item_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    item_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    source_url: Mapped[str] = mapped_column(String(1000), nullable=False)
+    remote_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    indexed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class JiraVisibilityCache(Base):
+    __tablename__ = "jira_visibility_cache"
+    __table_args__ = (
+        UniqueConstraint("user_id", "cloud_id", "issue_id", "item_type", "item_id", name="uq_jira_visibility_cache"),
+    )
+
+    cache_row_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, index=True)
+    cloud_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    issue_id: Mapped[str] = mapped_column(String(96), nullable=False, index=True)
+    item_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    item_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    can_access: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+
+
+class GithubUserConnection(Base):
+    __tablename__ = "github_user_connections"
+
+    connection_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    github_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    login: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    avatar_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    access_token_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    scopes: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    connected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
+
+
+class SlackUserConnection(Base):
+    __tablename__ = "slack_user_connections"
+    __table_args__ = (
+        UniqueConstraint("user_id", "team_id", name="uq_slack_user_connection_team"),
+    )
+
+    connection_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, index=True)
+    slack_user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    team_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    team_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    team_domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    access_token_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    refresh_token_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    scopes: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    connected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
+
+
+class WorkspaceSlackSource(Base):
+    __tablename__ = "workspace_slack_sources"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "team_id", "channel_id", name="uq_workspace_slack_channel"),
+    )
+
+    source_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String(96),
+        ForeignKey("workspaces.workspace_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    team_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    team_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    team_domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    channel_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    channel_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    channel_is_private: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    added_by_user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.user_id"), nullable=False, index=True)
+    sync_owner_user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.user_id"), nullable=False, index=True)
+    sync_status: Mapped[str] = mapped_column(String(32), default="idle", nullable=False)
+    sync_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_message_ts: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    next_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
+
+
+class SlackIndexedItem(Base):
+    __tablename__ = "slack_indexed_items"
+    __table_args__ = (
+        UniqueConstraint("source_id", "item_type", "item_id", name="uq_slack_indexed_item"),
+    )
+
+    item_row_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source_id: Mapped[str] = mapped_column(
+        String(96),
+        ForeignKey("workspace_slack_sources.source_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    workspace_id: Mapped[str] = mapped_column(String(96), nullable=False, index=True)
+    team_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    team_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    channel_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    channel_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    message_ts: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    thread_ts: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    item_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    item_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    source_url: Mapped[str] = mapped_column(String(1000), nullable=False)
+    remote_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    indexed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class SlackVisibilityCache(Base):
+    __tablename__ = "slack_visibility_cache"
+    __table_args__ = (
+        UniqueConstraint("user_id", "team_id", "channel_id", name="uq_slack_visibility_cache"),
+    )
+
+    cache_row_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, index=True)
+    team_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    channel_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    can_access: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
 
 
 class HierarchyNode(Base):

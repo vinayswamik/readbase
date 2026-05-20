@@ -57,6 +57,7 @@ def init_database(*, seed_admins: bool = True) -> None:
     settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
     _reset_legacy_hierarchy_schema()
     Base.metadata.create_all(bind=engine)
+    _ensure_incremental_schema()
     if seed_admins:
         seed_bootstrap_admins()
 
@@ -74,3 +75,15 @@ def _reset_legacy_hierarchy_schema() -> None:
     with engine.begin() as connection:
         connection.execute(text("DROP TABLE IF EXISTS hierarchy_connections"))
         connection.execute(text("DROP TABLE IF EXISTS hierarchy_nodes"))
+
+
+def _ensure_incremental_schema() -> None:
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+    if "workspace_members" in table_names:
+        column_names = {column["name"] for column in inspector.get_columns("workspace_members")}
+        if "connector_manager" not in column_names:
+            with engine.begin() as connection:
+                connection.execute(
+                    text("ALTER TABLE workspace_members ADD COLUMN connector_manager BOOLEAN NOT NULL DEFAULT 0")
+                )

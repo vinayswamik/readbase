@@ -80,6 +80,7 @@ def build_index(
                 "repo_id": repo_id,
                 "workspace_id": workspace_id or "",
                 "repo_url": repo_url,
+                "source_type": "repo",
                 "path": chunk["path"],
                 "start_line": int(chunk["start_line"]),
                 "end_line": int(chunk["end_line"]),
@@ -103,6 +104,81 @@ def build_index(
         "file_count": file_count,
         "chunk_count": len(chunks),
         "collection": collection_name(repo_id, workspace_id=workspace_id),
+        "embedding": "chroma_default",
+    }
+
+
+def build_jira_index(chunks: list[dict], workspace_id: str) -> dict:
+    collection = get_repo_collection(jira_collection_id(), workspace_id=workspace_id, recreate=True)
+    if chunks:
+        collection.upsert(
+            ids=[chunk["id"] for chunk in chunks],
+            documents=[chunk["text"] for chunk in chunks],
+            metadatas=[
+                {
+                    "source_type": "jira",
+                    "workspace_id": workspace_id,
+                    "path": chunk["path"],
+                    "start_line": 1,
+                    "end_line": 1,
+                    "source_url": chunk.get("source_url", ""),
+                    "cloud_id": chunk.get("cloud_id", ""),
+                    "project_id": chunk.get("project_id", ""),
+                    "project_key": chunk.get("project_key", ""),
+                    "issue_id": chunk.get("issue_id", ""),
+                    "issue_key": chunk.get("issue_key", ""),
+                    "item_type": chunk.get("item_type", ""),
+                    "item_id": chunk.get("item_id", ""),
+                }
+                for chunk in chunks
+            ],
+            embeddings=embed_texts([embedding_text(chunk) for chunk in chunks]),
+        )
+    return {
+        "repo_id": jira_collection_id(),
+        "workspace_id": workspace_id,
+        "repo_url": "jira://workspace",
+        "file_count": len({chunk.get("issue_key") for chunk in chunks}),
+        "chunk_count": len(chunks),
+        "collection": collection_name(jira_collection_id(), workspace_id=workspace_id),
+        "embedding": "chroma_default",
+    }
+
+
+def build_slack_index(chunks: list[dict], workspace_id: str) -> dict:
+    collection = get_repo_collection(slack_collection_id(), workspace_id=workspace_id, recreate=True)
+    if chunks:
+        collection.upsert(
+            ids=[chunk["id"] for chunk in chunks],
+            documents=[chunk["text"] for chunk in chunks],
+            metadatas=[
+                {
+                    "source_type": "slack",
+                    "workspace_id": workspace_id,
+                    "path": chunk["path"],
+                    "start_line": 1,
+                    "end_line": 1,
+                    "source_url": chunk.get("source_url", ""),
+                    "team_id": chunk.get("team_id", ""),
+                    "team_name": chunk.get("team_name", ""),
+                    "channel_id": chunk.get("channel_id", ""),
+                    "channel_name": chunk.get("channel_name", ""),
+                    "message_ts": chunk.get("message_ts", ""),
+                    "thread_ts": chunk.get("thread_ts", ""),
+                    "item_type": chunk.get("item_type", ""),
+                    "item_id": chunk.get("item_id", ""),
+                }
+                for chunk in chunks
+            ],
+            embeddings=embed_texts([embedding_text(chunk) for chunk in chunks]),
+        )
+    return {
+        "repo_id": slack_collection_id(),
+        "workspace_id": workspace_id,
+        "repo_url": "slack://workspace",
+        "file_count": len({chunk.get("channel_id") for chunk in chunks}),
+        "chunk_count": len(chunks),
+        "collection": collection_name(slack_collection_id(), workspace_id=workspace_id),
         "embedding": "chroma_default",
     }
 
@@ -153,6 +229,44 @@ def search(index: dict, question: str, top_k: int = DEFAULT_TOP_K) -> list[dict]
         include=["documents", "metadatas", "distances"],
     )
     return normalize_chroma_result(result)
+
+
+def search_jira(workspace_id: str, question: str, top_k: int = DEFAULT_TOP_K) -> list[dict]:
+    if not tokenize(question):
+        return []
+    collection = get_repo_collection(jira_collection_id(), workspace_id=workspace_id)
+    try:
+        result = collection.query(
+            query_embeddings=embed_texts([question]),
+            n_results=max(1, top_k),
+            include=["documents", "metadatas", "distances"],
+        )
+    except Exception:
+        return []
+    return normalize_chroma_result(result)
+
+
+def search_slack(workspace_id: str, question: str, top_k: int = DEFAULT_TOP_K) -> list[dict]:
+    if not tokenize(question):
+        return []
+    collection = get_repo_collection(slack_collection_id(), workspace_id=workspace_id)
+    try:
+        result = collection.query(
+            query_embeddings=embed_texts([question]),
+            n_results=max(1, top_k),
+            include=["documents", "metadatas", "distances"],
+        )
+    except Exception:
+        return []
+    return normalize_chroma_result(result)
+
+
+def jira_collection_id() -> str:
+    return "__jira__"
+
+
+def slack_collection_id() -> str:
+    return "__slack__"
 
 
 # Chroma keeps a persistent SQLite/vector index under .readbase/chroma.
@@ -231,6 +345,23 @@ def normalize_chroma_result(result: dict[str, Any]) -> list[dict]:
                 "start_line": int(metadata.get("start_line", 0)),
                 "end_line": int(metadata.get("end_line", 0)),
                 "text": document or "",
+                "source_type": metadata.get("source_type", "repo") or "repo",
+                "repo_id": metadata.get("repo_id") or None,
+                "repo_url": metadata.get("repo_url") or None,
+                "source_url": metadata.get("source_url") or None,
+                "cloud_id": metadata.get("cloud_id") or None,
+                "project_id": metadata.get("project_id") or None,
+                "project_key": metadata.get("project_key") or None,
+                "issue_id": metadata.get("issue_id") or None,
+                "issue_key": metadata.get("issue_key") or None,
+                "team_id": metadata.get("team_id") or None,
+                "team_name": metadata.get("team_name") or None,
+                "channel_id": metadata.get("channel_id") or None,
+                "channel_name": metadata.get("channel_name") or None,
+                "message_ts": metadata.get("message_ts") or None,
+                "thread_ts": metadata.get("thread_ts") or None,
+                "item_type": metadata.get("item_type") or None,
+                "item_id": metadata.get("item_id") or None,
             }
         )
     return matches

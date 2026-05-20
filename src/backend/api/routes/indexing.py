@@ -12,8 +12,13 @@ router = APIRouter(tags=["indexing"])
 
 
 @router.post("/index", response_model=IndexedRepoResponse)
-def index_endpoint(payload: IndexRequest, _user=Depends(require_authenticated_user)) -> dict:
+def index_endpoint(payload: IndexRequest, user=Depends(require_authenticated_user)) -> dict:
     try:
-        return index_repository(payload.repo_url, refresh=payload.refresh)
+        return index_repository(
+            payload.repo_url,
+            refresh=payload.refresh,
+            user_id=user.user_id,
+            user_email=user.email,
+        )
     except ServiceError as exc:
         raise service_error_to_http(exc) from exc

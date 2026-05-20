@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -64,6 +65,15 @@ class WorkspaceApiTests(unittest.TestCase):
         self.assertEqual(len(member_response.json()["workspaces"]), 1)
         self.assertEqual(other_response.status_code, 200)
         self.assertEqual(other_response.json()["workspaces"], [])
+
+    def test_missing_slack_config_returns_400(self):
+        self._login_as(AuthUser("member-1", "member@example.com", "Member", "member"))
+
+        with patch.dict("os.environ", {"SLACK_CLIENT_ID": "", "SLACK_CLIENT_SECRET": ""}):
+            response = self.client.get("/api/me/integrations/slack/start", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["detail"], "SLACK_CLIENT_ID is not configured.")
 
     def _login_as(self, user: AuthUser) -> None:
         self.app.dependency_overrides[require_authenticated_user] = lambda: user

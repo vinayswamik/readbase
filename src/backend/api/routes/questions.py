@@ -12,12 +12,13 @@ router = APIRouter(tags=["questions"])
 
 
 @router.post("/ask", response_model=AskResponse)
-def ask_endpoint(payload: AskRequest, _user=Depends(require_authenticated_user)) -> dict:
+def ask_endpoint(payload: AskRequest, user=Depends(require_authenticated_user)) -> dict:
     try:
         return ask_repository_question(
             repo_id=payload.repo_id,
             question=payload.question,
             top_k=payload.top_k,
+            user_id=user.user_id,
         )
     except ServiceError as exc:
         raise service_error_to_http(exc) from exc

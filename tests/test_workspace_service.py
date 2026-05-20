@@ -135,6 +135,26 @@ class WorkspaceServiceTests(unittest.TestCase):
                 "admin@example.com",
             )
 
+    def test_owner_can_grant_connector_manager(self):
+        workspace = workspace_service.create_workspace("admin-1", "Demo", owner_email="admin@example.com")
+        workspace_service.add_workspace_member("admin-1", workspace["workspace_id"], "member@example.com")
+
+        updated = workspace_service.update_workspace_member_connector_manager(
+            "admin-1",
+            workspace["workspace_id"],
+            "member@example.com",
+            True,
+        )
+
+        self.assertTrue(updated["connector_manager"])
+        self.assertTrue(
+            workspace_service.user_can_manage_workspace_connectors(
+                "member-1",
+                "member@example.com",
+                workspace["workspace_id"],
+            )
+        )
+
     def test_get_active_workspace_clears_missing_cli_state(self):
         workspace_service.set_active_workspace_id("missing")
 

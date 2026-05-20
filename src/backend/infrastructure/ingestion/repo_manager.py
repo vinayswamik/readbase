@@ -68,7 +68,12 @@ def repo_id_from_local_path(repo_path: Path) -> str:
 
 # High-level ingestion pipeline: validate URL, clone if needed, chunk files,
 # build the retrieval index, save it, then return stats to the UI.
-def index_repo(repo_url: str, refresh: bool = False, workspace_id: str | None = None) -> dict:
+def index_repo(
+    repo_url: str,
+    refresh: bool = False,
+    workspace_id: str | None = None,
+    github_token: str | None = None,
+) -> dict:
     ensure_data_dirs()
     repos_dir, indexes_dir = storage_dirs(workspace_id)
     repo_id = repo_id_from_url(repo_url)
@@ -85,7 +90,7 @@ def index_repo(repo_url: str, refresh: bool = False, workspace_id: str | None = 
 
     # Reuse an existing clone unless refresh was requested.
     if not repo_path.exists():
-        clone_repo(repo_url, repo_path)
+        clone_repo(repo_url, repo_path, github_token=github_token)
 
     chunks, file_count = chunk_repository(repo_path)
     index = build_index(
@@ -150,10 +155,22 @@ def index_local_repo(
 
 # Shell out to git instead of implementing GitHub download logic ourselves.
 # `--depth 1` keeps the first version fast by skipping full commit history.
-def clone_repo(repo_url: str, repo_path: Path) -> None:
+def clone_repo(repo_url: str, repo_path: Path, github_token: str | None = None) -> None:
+    command = ["git", "clone", "--depth", "1", repo_url, str(repo_path)]
+    if github_token:
+        command = [
+            "git",
+            "-c",
+            f"http.https://github.com/.extraheader=AUTHORIZATION: bearer {github_token}",
+            "clone",
+            "--depth",
+            "1",
+            repo_url,
+            str(repo_path),
+        ]
     try:
         result = subprocess.run(
-            ["git", "clone", "--depth", "1", repo_url, str(repo_path)],
+            command,
             check=False,
             capture_output=True,
             text=True,

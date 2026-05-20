@@ -12,6 +12,8 @@ from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from src.backend.api.routes import api_router
+from src.backend.application.services.jira_service import start_jira_sync_scheduler
+from src.backend.application.services.slack_service import start_slack_sync_scheduler
 from src.backend.infrastructure.database import init_database
 
 # Local dev bind address and where the frontend build writes browser assets.
@@ -24,6 +26,8 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Readbase", version="0.2.0")
     init_database()
     app.include_router(api_router)
+    start_jira_sync_scheduler()
+    start_slack_sync_scheduler()
     app.get("/", response_model=None)(frontend_root)
     app.mount(
         "/assets",

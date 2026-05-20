@@ -16,6 +16,10 @@ from src.backend.application.services.exceptions import (
     ResourceNotFoundError,
     ValidationError,
 )
+from src.backend.application.services.workspace_connector_permissions import (
+    update_workspace_member_connector_manager,
+    user_can_manage_workspace_connectors,
+)
 from src.backend.config.settings import CLI_STATE_FILE, DATA_DIR, WORKSPACES_DIR
 from src.backend.infrastructure.database import session_scope
 from src.backend.infrastructure.ingestion.repo_manager import list_indexes
@@ -360,11 +364,13 @@ def _ensure_user(session, user_id: str, email: str, name: str) -> User:
 
 
 def _public_member(member: WorkspaceMember, owner_id: str) -> dict:
+    is_owner = member.user_id == owner_id
     return {
         "email": member.member_email,
         "user_id": member.user_id,
         "added_at": _format_datetime(member.added_at),
-        "is_owner": member.user_id == owner_id,
+        "is_owner": is_owner,
+        "connector_manager": bool(is_owner or member.connector_manager),
     }
 
 
