@@ -100,7 +100,9 @@ function timeoutForUrl(url: string): number {
     url.includes("/ask") ||
     url.includes("/index") ||
     url.includes("/jira/sources") ||
-    url.includes("/slack/sources")
+    url.includes("/slack/sources") ||
+    url.includes("/linear/sources") ||
+    url.includes("/confluence/sources")
   ) {
     return LONG_REQUEST_TIMEOUT_MS;
   }

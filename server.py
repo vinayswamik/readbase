@@ -12,7 +12,9 @@ from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from src.backend.api.routes import api_router
+from src.backend.application.services.confluence_service import start_confluence_sync_scheduler
 from src.backend.application.services.jira_service import start_jira_sync_scheduler
+from src.backend.application.services.linear_service import start_linear_sync_scheduler
 from src.backend.application.services.slack_service import start_slack_sync_scheduler
 from src.backend.infrastructure.database import init_database
 
@@ -28,6 +30,8 @@ def create_app() -> FastAPI:
     app.include_router(api_router)
     start_jira_sync_scheduler()
     start_slack_sync_scheduler()
+    start_linear_sync_scheduler()
+    start_confluence_sync_scheduler()
     app.get("/", response_model=None)(frontend_root)
     app.mount(
         "/assets",

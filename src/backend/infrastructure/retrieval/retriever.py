@@ -183,6 +183,74 @@ def build_slack_index(chunks: list[dict], workspace_id: str) -> dict:
     }
 
 
+def build_linear_index(chunks: list[dict], workspace_id: str) -> dict:
+    collection = get_repo_collection(linear_collection_id(), workspace_id=workspace_id, recreate=True)
+    if chunks:
+        collection.upsert(
+            ids=[chunk["id"] for chunk in chunks],
+            documents=[chunk["text"] for chunk in chunks],
+            metadatas=[
+                {
+                    "source_type": "linear",
+                    "workspace_id": workspace_id,
+                    "path": chunk["path"],
+                    "start_line": 1,
+                    "end_line": 1,
+                    "source_url": chunk.get("source_url", ""),
+                    "linear_team_id": chunk.get("linear_team_id", ""),
+                    "linear_project_id": chunk.get("linear_project_id", ""),
+                    "issue_id": chunk.get("issue_id", ""),
+                    "issue_key": chunk.get("issue_key", ""),
+                    "item_type": chunk.get("item_type", ""),
+                    "item_id": chunk.get("item_id", ""),
+                }
+                for chunk in chunks
+            ],
+            embeddings=embed_texts([embedding_text(chunk) for chunk in chunks]),
+        )
+    return source_index_manifest(linear_collection_id(), workspace_id, "linear://workspace", chunks)
+
+
+def build_confluence_index(chunks: list[dict], workspace_id: str) -> dict:
+    collection = get_repo_collection(confluence_collection_id(), workspace_id=workspace_id, recreate=True)
+    if chunks:
+        collection.upsert(
+            ids=[chunk["id"] for chunk in chunks],
+            documents=[chunk["text"] for chunk in chunks],
+            metadatas=[
+                {
+                    "source_type": "confluence",
+                    "workspace_id": workspace_id,
+                    "path": chunk["path"],
+                    "start_line": 1,
+                    "end_line": 1,
+                    "source_url": chunk.get("source_url", ""),
+                    "cloud_id": chunk.get("cloud_id", ""),
+                    "space_id": chunk.get("space_id", ""),
+                    "space_key": chunk.get("space_key", ""),
+                    "page_id": chunk.get("page_id", ""),
+                    "item_type": chunk.get("item_type", ""),
+                    "item_id": chunk.get("item_id", ""),
+                }
+                for chunk in chunks
+            ],
+            embeddings=embed_texts([embedding_text(chunk) for chunk in chunks]),
+        )
+    return source_index_manifest(confluence_collection_id(), workspace_id, "confluence://workspace", chunks)
+
+
+def source_index_manifest(repo_id: str, workspace_id: str, repo_url: str, chunks: list[dict]) -> dict:
+    return {
+        "repo_id": repo_id,
+        "workspace_id": workspace_id,
+        "repo_url": repo_url,
+        "file_count": len({chunk.get("path") for chunk in chunks}),
+        "chunk_count": len(chunks),
+        "collection": collection_name(repo_id, workspace_id=workspace_id),
+        "embedding": "chroma_default",
+    }
+
+
 # Persist lightweight metadata as readable JSON for repo listing and existence checks.
 def save_index(index: dict, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -232,24 +300,25 @@ def search(index: dict, question: str, top_k: int = DEFAULT_TOP_K) -> list[dict]
 
 
 def search_jira(workspace_id: str, question: str, top_k: int = DEFAULT_TOP_K) -> list[dict]:
-    if not tokenize(question):
-        return []
-    collection = get_repo_collection(jira_collection_id(), workspace_id=workspace_id)
-    try:
-        result = collection.query(
-            query_embeddings=embed_texts([question]),
-            n_results=max(1, top_k),
-            include=["documents", "metadatas", "distances"],
-        )
-    except Exception:
-        return []
-    return normalize_chroma_result(result)
+    return search_workspace_source(jira_collection_id(), workspace_id, question, top_k)
 
 
 def search_slack(workspace_id: str, question: str, top_k: int = DEFAULT_TOP_K) -> list[dict]:
+    return search_workspace_source(slack_collection_id(), workspace_id, question, top_k)
+
+
+def search_linear(workspace_id: str, question: str, top_k: int = DEFAULT_TOP_K) -> list[dict]:
+    return search_workspace_source(linear_collection_id(), workspace_id, question, top_k)
+
+
+def search_confluence(workspace_id: str, question: str, top_k: int = DEFAULT_TOP_K) -> list[dict]:
+    return search_workspace_source(confluence_collection_id(), workspace_id, question, top_k)
+
+
+def search_workspace_source(collection_id_value: str, workspace_id: str, question: str, top_k: int) -> list[dict]:
     if not tokenize(question):
         return []
-    collection = get_repo_collection(slack_collection_id(), workspace_id=workspace_id)
+    collection = get_repo_collection(collection_id_value, workspace_id=workspace_id)
     try:
         result = collection.query(
             query_embeddings=embed_texts([question]),
@@ -267,6 +336,14 @@ def jira_collection_id() -> str:
 
 def slack_collection_id() -> str:
     return "__slack__"
+
+
+def linear_collection_id() -> str:
+    return "__linear__"
+
+
+def confluence_collection_id() -> str:
+    return "__confluence__"
 
 
 # Chroma keeps a persistent SQLite/vector index under .readbase/chroma.
@@ -354,12 +431,17 @@ def normalize_chroma_result(result: dict[str, Any]) -> list[dict]:
                 "project_key": metadata.get("project_key") or None,
                 "issue_id": metadata.get("issue_id") or None,
                 "issue_key": metadata.get("issue_key") or None,
+                "linear_team_id": metadata.get("linear_team_id") or None,
+                "linear_project_id": metadata.get("linear_project_id") or None,
                 "team_id": metadata.get("team_id") or None,
                 "team_name": metadata.get("team_name") or None,
                 "channel_id": metadata.get("channel_id") or None,
                 "channel_name": metadata.get("channel_name") or None,
                 "message_ts": metadata.get("message_ts") or None,
                 "thread_ts": metadata.get("thread_ts") or None,
+                "space_id": metadata.get("space_id") or None,
+                "space_key": metadata.get("space_key") or None,
+                "page_id": metadata.get("page_id") or None,
                 "item_type": metadata.get("item_type") or None,
                 "item_id": metadata.get("item_id") or None,
             }

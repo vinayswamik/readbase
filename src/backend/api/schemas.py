@@ -40,7 +40,11 @@ class SourceMatchResponse(BaseModel):
     repo_url: str | None = None
     source_url: str | None = None
     issue_key: str | None = None
+    linear_team_id: str | None = None
+    linear_project_id: str | None = None
     channel_name: str | None = None
+    space_key: str | None = None
+    page_id: str | None = None
     item_type: str | None = None
 
 
@@ -131,6 +135,58 @@ class GithubRepositoriesResponse(BaseModel):
     repositories: list[GithubRepositoryResponse]
 
 
+class BitbucketConnectionResponse(BaseModel):
+    connected: bool
+    configured: bool = False
+    bitbucket_account_id: str | None = None
+    username: str | None = None
+    display_name: str | None = None
+    avatar_url: str | None = None
+    scopes: list[str] = []
+
+
+class BitbucketRepositoryResponse(BaseModel):
+    id: str
+    name: str
+    full_name: str
+    html_url: str
+    clone_url: str
+    private: bool
+    description: str | None = None
+    workspace_slug: str | None = None
+    updated_at: str | None = None
+
+
+class BitbucketRepositoriesResponse(BaseModel):
+    repositories: list[BitbucketRepositoryResponse]
+
+
+class GitlabConnectionResponse(BaseModel):
+    connected: bool
+    configured: bool = False
+    gitlab_user_id: str | None = None
+    username: str | None = None
+    name: str | None = None
+    avatar_url: str | None = None
+    scopes: list[str] = []
+
+
+class GitlabProjectResponse(BaseModel):
+    id: str
+    name: str
+    path_with_namespace: str
+    web_url: str
+    clone_url: str
+    visibility: str
+    description: str | None = None
+    namespace: str | None = None
+    updated_at: str | None = None
+
+
+class GitlabProjectsResponse(BaseModel):
+    projects: list[GitlabProjectResponse]
+
+
 class SlackTeamResponse(BaseModel):
     team_id: str
     team_name: str
@@ -191,6 +247,122 @@ class WorkspaceSlackSourceResponse(BaseModel):
 
 class WorkspaceSlackSourcesResponse(BaseModel):
     sources: list[WorkspaceSlackSourceResponse]
+
+
+class LinearConnectionResponse(BaseModel):
+    connected: bool
+    configured: bool = False
+    linear_user_id: str | None = None
+    workspace_id: str | None = None
+    workspace_name: str | None = None
+    name: str | None = None
+    email: str | None = None
+    scopes: list[str] = []
+
+
+class LinearSelectableSourceResponse(BaseModel):
+    kind: str
+    team_id: str
+    team_name: str
+    project_id: str | None = None
+    project_name: str | None = None
+
+
+class LinearSelectableSourcesResponse(BaseModel):
+    sources: list[LinearSelectableSourceResponse]
+
+
+class AddWorkspaceLinearSourceRequest(BaseModel):
+    team_id: str
+    team_name: str
+    project_id: str | None = None
+    project_name: str | None = None
+
+
+class WorkspaceLinearSourceResponse(BaseModel):
+    source_id: str
+    workspace_id: str
+    linear_team_id: str
+    team_name: str
+    linear_project_id: str | None = None
+    project_name: str | None = None
+    added_by_user_id: str
+    sync_owner_user_id: str
+    sync_status: str
+    sync_error: str | None = None
+    last_synced_at: str | None = None
+    next_sync_at: str | None = None
+    created_at: str
+    updated_at: str
+    user_access: str = "unknown"
+
+
+class WorkspaceLinearSourcesResponse(BaseModel):
+    sources: list[WorkspaceLinearSourceResponse]
+
+
+class ConfluenceSiteResponse(BaseModel):
+    cloud_id: str
+    name: str
+    url: str
+    scopes: list[str] = []
+    avatar_url: str | None = None
+
+
+class ConfluenceConnectionResponse(BaseModel):
+    connected: bool
+    configured: bool = False
+    account_id: str | None = None
+    account_email: str | None = None
+    account_name: str | None = None
+    scopes: list[str] = []
+    sites: list[ConfluenceSiteResponse] = []
+
+
+class ConfluenceSpaceResponse(BaseModel):
+    cloud_id: str
+    site_name: str
+    site_url: str
+    space_id: str
+    space_key: str
+    space_name: str
+
+
+class ConfluenceSpacesResponse(BaseModel):
+    spaces: list[ConfluenceSpaceResponse]
+
+
+class AddWorkspaceConfluenceSpaceRequest(BaseModel):
+    cloud_id: str
+    site_name: str
+    site_url: str
+    space_id: str
+    space_key: str
+    space_name: str
+
+
+class WorkspaceConfluenceSourceResponse(BaseModel):
+    source_id: str
+    workspace_id: str
+    cloud_id: str
+    site_name: str
+    site_url: str
+    space_id: str
+    space_key: str
+    space_name: str
+    added_by_user_id: str
+    sync_owner_user_id: str
+    sync_status: str
+    sync_error: str | None = None
+    last_synced_at: str | None = None
+    next_sync_at: str | None = None
+    created_at: str
+    updated_at: str
+    user_access: str = "unknown"
+
+
+class WorkspaceConfluenceSourcesResponse(BaseModel):
+    sources: list[WorkspaceConfluenceSourceResponse]
 
 
 class JiraProjectResponse(BaseModel):

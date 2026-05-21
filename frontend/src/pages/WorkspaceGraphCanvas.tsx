@@ -40,7 +40,7 @@ export function WorkspaceGraphCanvas({
   onBoardMouseDown,
   onBoardMouseMove,
   onBoardMouseUp,
-  onNodeMouseDown,
+  onNodeClick,
   onOpenChat,
 }: {
   userRole: AuthUser["role"];
@@ -60,8 +60,8 @@ export function WorkspaceGraphCanvas({
   onViewportReset: () => void;
   onBoardMouseDown: (event: MouseEvent<HTMLDivElement>) => void;
   onBoardMouseMove: (event: MouseEvent<HTMLDivElement>) => void;
-  onBoardMouseUp: (event: MouseEvent<HTMLDivElement>) => void;
-  onNodeMouseDown: (event: MouseEvent<HTMLButtonElement>, node: HierarchyNode) => void;
+  onBoardMouseUp: () => void;
+  onNodeClick: (event: MouseEvent<HTMLButtonElement>, node: HierarchyNode) => void;
   onOpenChat: () => void;
 }) {
   return (
@@ -123,7 +123,7 @@ export function WorkspaceGraphCanvas({
               type="button"
               className={`graph-node${node.node_id === selectedNodeId ? " selected" : ""}`}
               style={{ left: node.x, top: node.y }}
-              onMouseDown={(event) => onNodeMouseDown(event, node)}
+              onClick={(event) => onNodeClick(event, node)}
             >
               <strong>{node.display_name}</strong>
               <span>{node.assigned_user_name || node.assigned_user_email || "Assigned user"}</span>

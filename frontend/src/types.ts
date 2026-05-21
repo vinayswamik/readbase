@@ -21,12 +21,16 @@ export interface SourceMatch {
   start_line: number;
   end_line: number;
   text: string;
-  source_type?: "repo" | "jira" | "slack";
+  source_type?: "repo" | "jira" | "slack" | "linear" | "confluence";
   repo_id?: string | null;
   repo_url?: string | null;
   source_url?: string | null;
   issue_key?: string | null;
+  linear_team_id?: string | null;
+  linear_project_id?: string | null;
   channel_name?: string | null;
+  space_key?: string | null;
+  page_id?: string | null;
   item_type?: string | null;
 }
 
@@ -125,6 +129,58 @@ export interface GithubRepositoriesResponse {
   repositories: GithubRepository[];
 }
 
+export interface BitbucketConnection {
+  connected: boolean;
+  configured: boolean;
+  bitbucket_account_id?: string | null;
+  username?: string | null;
+  display_name?: string | null;
+  avatar_url?: string | null;
+  scopes: string[];
+}
+
+export interface BitbucketRepository {
+  id: string;
+  name: string;
+  full_name: string;
+  html_url: string;
+  clone_url: string;
+  private: boolean;
+  description?: string | null;
+  workspace_slug?: string | null;
+  updated_at?: string | null;
+}
+
+export interface BitbucketRepositoriesResponse {
+  repositories: BitbucketRepository[];
+}
+
+export interface GitlabConnection {
+  connected: boolean;
+  configured: boolean;
+  gitlab_user_id?: string | null;
+  username?: string | null;
+  name?: string | null;
+  avatar_url?: string | null;
+  scopes: string[];
+}
+
+export interface GitlabProject {
+  id: string;
+  name: string;
+  path_with_namespace: string;
+  web_url: string;
+  clone_url: string;
+  visibility: string;
+  description?: string | null;
+  namespace?: string | null;
+  updated_at?: string | null;
+}
+
+export interface GitlabProjectsResponse {
+  projects: GitlabProject[];
+}
+
 export interface SlackTeam {
   team_id: string;
   team_name: string;
@@ -176,6 +232,98 @@ export interface WorkspaceSlackSource {
 
 export interface WorkspaceSlackSourcesResponse {
   sources: WorkspaceSlackSource[];
+}
+
+export interface LinearConnection {
+  connected: boolean;
+  configured: boolean;
+  linear_user_id?: string | null;
+  workspace_id?: string | null;
+  workspace_name?: string | null;
+  name?: string | null;
+  email?: string | null;
+  scopes: string[];
+}
+
+export interface LinearSelectableSource {
+  kind: string;
+  team_id: string;
+  team_name: string;
+  project_id?: string | null;
+  project_name?: string | null;
+}
+
+export interface LinearSelectableSourcesResponse {
+  sources: LinearSelectableSource[];
+}
+
+export interface WorkspaceLinearSource {
+  source_id: string;
+  workspace_id: string;
+  linear_team_id: string;
+  team_name: string;
+  linear_project_id?: string | null;
+  project_name?: string | null;
+  added_by_user_id: string;
+  sync_owner_user_id: string;
+  sync_status: string;
+  sync_error?: string | null;
+  last_synced_at?: string | null;
+  next_sync_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  user_access: string;
+}
+
+export interface WorkspaceLinearSourcesResponse {
+  sources: WorkspaceLinearSource[];
+}
+
+export interface ConfluenceConnection {
+  connected: boolean;
+  configured: boolean;
+  account_id?: string | null;
+  account_email?: string | null;
+  account_name?: string | null;
+  scopes: string[];
+  sites: JiraSite[];
+}
+
+export interface ConfluenceSpace {
+  cloud_id: string;
+  site_name: string;
+  site_url: string;
+  space_id: string;
+  space_key: string;
+  space_name: string;
+}
+
+export interface ConfluenceSpacesResponse {
+  spaces: ConfluenceSpace[];
+}
+
+export interface WorkspaceConfluenceSource {
+  source_id: string;
+  workspace_id: string;
+  cloud_id: string;
+  site_name: string;
+  site_url: string;
+  space_id: string;
+  space_key: string;
+  space_name: string;
+  added_by_user_id: string;
+  sync_owner_user_id: string;
+  sync_status: string;
+  sync_error?: string | null;
+  last_synced_at?: string | null;
+  next_sync_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  user_access: string;
+}
+
+export interface WorkspaceConfluenceSourcesResponse {
+  sources: WorkspaceConfluenceSource[];
 }
 
 export interface JiraProject {

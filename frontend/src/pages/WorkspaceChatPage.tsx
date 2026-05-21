@@ -11,8 +11,17 @@ import {
 import type {
   AskResponse,
   AuthUser,
+  BitbucketConnection,
+  BitbucketRepositoriesResponse,
+  BitbucketRepository,
   ChatMessage,
+  ConfluenceConnection,
+  ConfluenceSpace,
+  ConfluenceSpacesResponse,
   CreateHierarchyNodeResponse,
+  GitlabConnection,
+  GitlabProject,
+  GitlabProjectsResponse,
   GithubConnection,
   GithubRepositoriesResponse,
   GithubRepository,
@@ -25,6 +34,9 @@ import type {
   JiraConnection,
   JiraProject,
   JiraProjectsResponse,
+  LinearConnection,
+  LinearSelectableSource,
+  LinearSelectableSourcesResponse,
   ReposResponse,
   SlackChannel,
   SlackChannelsResponse,
@@ -33,6 +45,10 @@ import type {
   Workspace,
   WorkspaceJiraSource,
   WorkspaceJiraSourcesResponse,
+  WorkspaceConfluenceSource,
+  WorkspaceConfluenceSourcesResponse,
+  WorkspaceLinearSource,
+  WorkspaceLinearSourcesResponse,
   WorkspaceSlackSource,
   WorkspaceSlackSourcesResponse,
   WorkspaceMember,
@@ -56,17 +72,12 @@ import {
 
 const NODE_WIDTH = 168;
 const NODE_HEIGHT = 76;
-const DRAG_THRESHOLD_PX = 3;
 const GRAPH_VIEW_BUFFER = 360;
-
-type DragState = {
-  nodeId: string;
-  startClientX: number;
-  startClientY: number;
-  startX: number;
-  startY: number;
-  moved: boolean;
-};
+const GRAPH_LAYOUT_START_X = 80;
+const GRAPH_LAYOUT_START_Y = 80;
+const GRAPH_LAYOUT_HORIZONTAL_GAP = 220;
+const GRAPH_LAYOUT_VERTICAL_GAP = 150;
+const GRAPH_LAYOUT_ROOT_GAP = 1.2;
 
 type PanState = {
   startClientX: number;
@@ -100,6 +111,14 @@ export function WorkspaceChatPage({
   const [githubRepositories, setGithubRepositories] = useState<GithubRepository[]>([]);
   const [githubRepositoryQuery, setGithubRepositoryQuery] = useState("");
   const [githubRepositoriesLoading, setGithubRepositoriesLoading] = useState(false);
+  const [bitbucketConnection, setBitbucketConnection] = useState<BitbucketConnection | null>(null);
+  const [bitbucketRepositories, setBitbucketRepositories] = useState<BitbucketRepository[]>([]);
+  const [bitbucketRepositoryQuery, setBitbucketRepositoryQuery] = useState("");
+  const [bitbucketLoading, setBitbucketLoading] = useState(false);
+  const [gitlabConnection, setGitlabConnection] = useState<GitlabConnection | null>(null);
+  const [gitlabProjects, setGitlabProjects] = useState<GitlabProject[]>([]);
+  const [gitlabProjectQuery, setGitlabProjectQuery] = useState("");
+  const [gitlabLoading, setGitlabLoading] = useState(false);
   const [jiraConnection, setJiraConnection] = useState<JiraConnection | null>(null);
   const [jiraSources, setJiraSources] = useState<WorkspaceJiraSource[]>([]);
   const [jiraProjects, setJiraProjects] = useState<JiraProject[]>([]);
@@ -111,6 +130,16 @@ export function WorkspaceChatPage({
   const [slackChannelQuery, setSlackChannelQuery] = useState("");
   const [slackSelectedTeamId, setSlackSelectedTeamId] = useState("");
   const [slackLoading, setSlackLoading] = useState(false);
+  const [linearConnection, setLinearConnection] = useState<LinearConnection | null>(null);
+  const [linearSources, setLinearSources] = useState<WorkspaceLinearSource[]>([]);
+  const [linearSelectableSources, setLinearSelectableSources] = useState<LinearSelectableSource[]>([]);
+  const [linearQuery, setLinearQuery] = useState("");
+  const [linearLoading, setLinearLoading] = useState(false);
+  const [confluenceConnection, setConfluenceConnection] = useState<ConfluenceConnection | null>(null);
+  const [confluenceSources, setConfluenceSources] = useState<WorkspaceConfluenceSource[]>([]);
+  const [confluenceSpaces, setConfluenceSpaces] = useState<ConfluenceSpace[]>([]);
+  const [confluenceQuery, setConfluenceQuery] = useState("");
+  const [confluenceLoading, setConfluenceLoading] = useState(false);
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [mode, setMode] = useState("retrieval");
@@ -131,7 +160,6 @@ export function WorkspaceChatPage({
   const [reparentNodeId, setReparentNodeId] = useState("");
   const [viewport, setViewport] = useState<Viewport>({ x: 120, y: 80, scale: 1 });
   const [boardSize, setBoardSize] = useState<BoardSize>({ width: 0, height: 0 });
-  const [dragState, setDragState] = useState<DragState | null>(null);
   const [panState, setPanState] = useState<PanState | null>(null);
   const createNodeInFlightRef = useRef(false);
   const boardRef = useRef<HTMLDivElement | null>(null);
@@ -150,13 +178,17 @@ export function WorkspaceChatPage({
     () => nodes.find((node) => node.node_id === selectedNodeId) ?? null,
     [nodes, selectedNodeId],
   );
-  const nodeById = useMemo(() => {
+  const graphNodes = useMemo(
+    () => layoutHierarchyNodes(nodes, connections),
+    [connections, nodes],
+  );
+  const graphNodeById = useMemo(() => {
     const lookup = new Map<string, HierarchyNode>();
-    for (const node of nodes) {
+    for (const node of graphNodes) {
       lookup.set(node.node_id, node);
     }
     return lookup;
-  }, [nodes]);
+  }, [graphNodes]);
   const canManageSelectedNode = Boolean(
     selectedNode && user.role === "admin",
   );
@@ -212,8 +244,8 @@ export function WorkspaceChatPage({
           ))),
   );
   const visibleNodes = useMemo(
-    () => getVisibleNodes(nodes, viewport, boardSize, selectedNodeId),
-    [boardSize, nodes, selectedNodeId, viewport],
+    () => getVisibleNodes(graphNodes, viewport, boardSize, selectedNodeId),
+    [boardSize, graphNodes, selectedNodeId, viewport],
   );
   const visibleNodeIds = useMemo(
     () => new Set(visibleNodes.map((node) => node.node_id)),
@@ -228,8 +260,8 @@ export function WorkspaceChatPage({
             visibleNodeIds.has(connection.child_node_id),
         )
         .map((connection): EdgeSegment | null => {
-          const parent = nodeById.get(connection.parent_node_id);
-          const child = nodeById.get(connection.child_node_id);
+          const parent = graphNodeById.get(connection.parent_node_id);
+          const child = graphNodeById.get(connection.child_node_id);
           if (!parent || !child) {
             return null;
           }
@@ -246,7 +278,7 @@ export function WorkspaceChatPage({
           };
         })
         .filter((segment): segment is EdgeSegment => Boolean(segment)),
-    [connections, nodeById, visibleNodeIds],
+    [connections, graphNodeById, visibleNodeIds],
   );
 
   const handleApiError = useCallback(
@@ -345,6 +377,56 @@ export function WorkspaceChatPage({
     [handleApiError],
   );
 
+  const loadBitbucketConnection = useCallback(async () => {
+    try {
+      const result = await fetchJson<BitbucketConnection>("/api/me/integrations/bitbucket");
+      setBitbucketConnection(result);
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    }
+  }, [handleApiError]);
+
+  const loadBitbucketRepositories = useCallback(
+    async (query = "") => {
+      setBitbucketLoading(true);
+      try {
+        const params = query.trim() ? `?query=${encodeURIComponent(query.trim())}` : "";
+        const result = await fetchJson<BitbucketRepositoriesResponse>(`/api/me/integrations/bitbucket/repos${params}`);
+        setBitbucketRepositories(result.repositories || []);
+      } catch (error) {
+        handleApiError(error, setConnectorError);
+      } finally {
+        setBitbucketLoading(false);
+      }
+    },
+    [handleApiError],
+  );
+
+  const loadGitlabConnection = useCallback(async () => {
+    try {
+      const result = await fetchJson<GitlabConnection>("/api/me/integrations/gitlab");
+      setGitlabConnection(result);
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    }
+  }, [handleApiError]);
+
+  const loadGitlabProjects = useCallback(
+    async (query = "") => {
+      setGitlabLoading(true);
+      try {
+        const params = query.trim() ? `?query=${encodeURIComponent(query.trim())}` : "";
+        const result = await fetchJson<GitlabProjectsResponse>(`/api/me/integrations/gitlab/projects${params}`);
+        setGitlabProjects(result.projects || []);
+      } catch (error) {
+        handleApiError(error, setConnectorError);
+      } finally {
+        setGitlabLoading(false);
+      }
+    },
+    [handleApiError],
+  );
+
   const loadJiraConnection = useCallback(async () => {
     try {
       const result = await fetchJson<JiraConnection>("/api/me/integrations/jira");
@@ -429,6 +511,78 @@ export function WorkspaceChatPage({
     [handleApiError],
   );
 
+  const loadLinearConnection = useCallback(async () => {
+    try {
+      const result = await fetchJson<LinearConnection>("/api/me/integrations/linear");
+      setLinearConnection(result);
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    }
+  }, [handleApiError]);
+
+  const loadLinearSources = useCallback(async () => {
+    try {
+      const result = await fetchJson<WorkspaceLinearSourcesResponse>(
+        `/api/workspaces/${workspace.workspace_id}/linear/sources`,
+      );
+      setLinearSources(result.sources || []);
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    }
+  }, [handleApiError, workspace.workspace_id]);
+
+  const loadLinearSelectableSources = useCallback(
+    async (query = "") => {
+      setLinearLoading(true);
+      try {
+        const params = query.trim() ? `?query=${encodeURIComponent(query.trim())}` : "";
+        const result = await fetchJson<LinearSelectableSourcesResponse>(`/api/me/integrations/linear/sources${params}`);
+        setLinearSelectableSources(result.sources || []);
+      } catch (error) {
+        handleApiError(error, setConnectorError);
+      } finally {
+        setLinearLoading(false);
+      }
+    },
+    [handleApiError],
+  );
+
+  const loadConfluenceConnection = useCallback(async () => {
+    try {
+      const result = await fetchJson<ConfluenceConnection>("/api/me/integrations/confluence");
+      setConfluenceConnection(result);
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    }
+  }, [handleApiError]);
+
+  const loadConfluenceSources = useCallback(async () => {
+    try {
+      const result = await fetchJson<WorkspaceConfluenceSourcesResponse>(
+        `/api/workspaces/${workspace.workspace_id}/confluence/sources`,
+      );
+      setConfluenceSources(result.sources || []);
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    }
+  }, [handleApiError, workspace.workspace_id]);
+
+  const loadConfluenceSpaces = useCallback(
+    async (query = "") => {
+      setConfluenceLoading(true);
+      try {
+        const params = query.trim() ? `?query=${encodeURIComponent(query.trim())}` : "";
+        const result = await fetchJson<ConfluenceSpacesResponse>(`/api/me/integrations/confluence/spaces${params}`);
+        setConfluenceSpaces(result.spaces || []);
+      } catch (error) {
+        handleApiError(error, setConnectorError);
+      } finally {
+        setConfluenceLoading(false);
+      }
+    },
+    [handleApiError],
+  );
+
   const queueGraphRefresh = useCallback(() => {
     if (queuedGraphRefreshRef.current !== null) {
       window.clearTimeout(queuedGraphRefreshRef.current);
@@ -443,11 +597,17 @@ export function WorkspaceChatPage({
     void loadRepos();
     void loadGraph();
     void loadGithubConnection();
+    void loadBitbucketConnection();
+    void loadGitlabConnection();
     void loadJiraConnection();
     void loadJiraSources();
     void loadSlackConnection();
     void loadSlackSources();
-  }, [loadGithubConnection, loadGraph, loadJiraConnection, loadJiraSources, loadRepos, loadSlackConnection, loadSlackSources]);
+    void loadLinearConnection();
+    void loadLinearSources();
+    void loadConfluenceConnection();
+    void loadConfluenceSources();
+  }, [loadBitbucketConnection, loadConfluenceConnection, loadConfluenceSources, loadGithubConnection, loadGitlabConnection, loadGraph, loadJiraConnection, loadJiraSources, loadLinearConnection, loadLinearSources, loadRepos, loadSlackConnection, loadSlackSources]);
 
   useEffect(() => {
     if (activeConnectorId) {
@@ -457,6 +617,18 @@ export function WorkspaceChatPage({
       void loadGithubConnection();
       if (githubConnection?.connected) {
         void loadGithubRepositories(githubRepositoryQuery);
+      }
+    }
+    if (activeConnectorId === "bitbucket") {
+      void loadBitbucketConnection();
+      if (bitbucketConnection?.connected) {
+        void loadBitbucketRepositories(bitbucketRepositoryQuery);
+      }
+    }
+    if (activeConnectorId === "gitlab") {
+      void loadGitlabConnection();
+      if (gitlabConnection?.connected) {
+        void loadGitlabProjects(gitlabProjectQuery);
       }
     }
     if (activeConnectorId === "jira") {
@@ -473,7 +645,21 @@ export function WorkspaceChatPage({
         void loadSlackChannels(slackSelectedTeamId, slackChannelQuery);
       }
     }
-  }, [activeConnectorId, githubConnection?.connected, githubRepositoryQuery, jiraConnection?.connected, jiraProjectQuery, loadConnectorMembers, loadGithubConnection, loadGithubRepositories, loadJiraConnection, loadJiraProjects, loadJiraSources, loadSlackChannels, loadSlackConnection, loadSlackSources, slackChannelQuery, slackConnection?.connected, slackSelectedTeamId]);
+    if (activeConnectorId === "linear") {
+      void loadLinearConnection();
+      void loadLinearSources();
+      if (linearConnection?.connected) {
+        void loadLinearSelectableSources(linearQuery);
+      }
+    }
+    if (activeConnectorId === "confluence") {
+      void loadConfluenceConnection();
+      void loadConfluenceSources();
+      if (confluenceConnection?.connected) {
+        void loadConfluenceSpaces(confluenceQuery);
+      }
+    }
+  }, [activeConnectorId, bitbucketConnection?.connected, bitbucketRepositoryQuery, confluenceConnection?.connected, confluenceQuery, githubConnection?.connected, githubRepositoryQuery, gitlabConnection?.connected, gitlabProjectQuery, jiraConnection?.connected, jiraProjectQuery, linearConnection?.connected, linearQuery, loadBitbucketConnection, loadBitbucketRepositories, loadConfluenceConnection, loadConfluenceSources, loadConfluenceSpaces, loadConnectorMembers, loadGithubConnection, loadGithubRepositories, loadGitlabConnection, loadGitlabProjects, loadJiraConnection, loadJiraProjects, loadJiraSources, loadLinearConnection, loadLinearSelectableSources, loadLinearSources, loadSlackChannels, loadSlackConnection, loadSlackSources, slackChannelQuery, slackConnection?.connected, slackSelectedTeamId]);
 
   useEffect(
     () => () => {
@@ -555,7 +741,8 @@ export function WorkspaceChatPage({
         refresh: connectorRefreshRepo,
       });
       setRepoId(result.repo_id);
-      setConnectorStatus("Repository indexed. Answers will use it only for users with GitHub access.");
+      const providerName = activeConnector?.name || "provider";
+      setConnectorStatus(`Repository indexed. Answers will use it only for users with ${providerName} access.`);
       await loadRepos(result.repo_id);
     } catch (error) {
       handleApiError(error, setConnectorError);
@@ -566,6 +753,44 @@ export function WorkspaceChatPage({
 
   function handleGithubConnect() {
     window.location.assign("/api/me/integrations/github/start");
+  }
+
+  function handleBitbucketConnect() {
+    window.location.assign("/api/me/integrations/bitbucket/start");
+  }
+
+  async function handleBitbucketDisconnect() {
+    setBitbucketLoading(true);
+    setConnectorError(null);
+    try {
+      const result = await deleteJson<BitbucketConnection>("/api/me/integrations/bitbucket");
+      setBitbucketConnection(result);
+      setBitbucketRepositories([]);
+      setConnectorStatus("Bitbucket disconnected.");
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    } finally {
+      setBitbucketLoading(false);
+    }
+  }
+
+  function handleGitlabConnect() {
+    window.location.assign("/api/me/integrations/gitlab/start");
+  }
+
+  async function handleGitlabDisconnect() {
+    setGitlabLoading(true);
+    setConnectorError(null);
+    try {
+      const result = await deleteJson<GitlabConnection>("/api/me/integrations/gitlab");
+      setGitlabConnection(result);
+      setGitlabProjects([]);
+      setConnectorStatus("GitLab disconnected.");
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    } finally {
+      setGitlabLoading(false);
+    }
   }
 
   async function handleGithubDisconnect() {
@@ -722,6 +947,144 @@ export function WorkspaceChatPage({
     }
   }
 
+  function handleLinearConnect() {
+    window.location.assign("/api/me/integrations/linear/start");
+  }
+
+  async function handleLinearDisconnect() {
+    setLinearLoading(true);
+    setConnectorError(null);
+    try {
+      const result = await deleteJson<LinearConnection>("/api/me/integrations/linear");
+      setLinearConnection(result);
+      setLinearSelectableSources([]);
+      setConnectorStatus("Linear disconnected.");
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    } finally {
+      setLinearLoading(false);
+    }
+  }
+
+  async function handleAddLinearSource(source: LinearSelectableSource) {
+    setLinearLoading(true);
+    setConnectorError(null);
+    try {
+      await postJson<LinearSelectableSource, WorkspaceLinearSource>(
+        `/api/workspaces/${workspace.workspace_id}/linear/sources`,
+        source,
+      );
+      setConnectorStatus(`${source.project_name || source.team_name} added to this workspace.`);
+      await loadLinearSources();
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    } finally {
+      setLinearLoading(false);
+    }
+  }
+
+  async function handleSyncLinearSource(sourceId: string) {
+    setLinearLoading(true);
+    setConnectorError(null);
+    try {
+      await postJson<undefined, WorkspaceLinearSource>(
+        `/api/workspaces/${workspace.workspace_id}/linear/sources/${sourceId}/sync`,
+      );
+      setConnectorStatus("Linear source synced.");
+      await loadLinearSources();
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+      await loadLinearSources();
+    } finally {
+      setLinearLoading(false);
+    }
+  }
+
+  async function handleRemoveLinearSource(sourceId: string) {
+    setLinearLoading(true);
+    setConnectorError(null);
+    try {
+      await deleteJson<WorkspaceLinearSource>(
+        `/api/workspaces/${workspace.workspace_id}/linear/sources/${sourceId}`,
+      );
+      setConnectorStatus("Linear source removed.");
+      await loadLinearSources();
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    } finally {
+      setLinearLoading(false);
+    }
+  }
+
+  function handleConfluenceConnect() {
+    window.location.assign("/api/me/integrations/confluence/start");
+  }
+
+  async function handleConfluenceDisconnect() {
+    setConfluenceLoading(true);
+    setConnectorError(null);
+    try {
+      const result = await deleteJson<ConfluenceConnection>("/api/me/integrations/confluence");
+      setConfluenceConnection(result);
+      setConfluenceSpaces([]);
+      setConnectorStatus("Confluence disconnected.");
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    } finally {
+      setConfluenceLoading(false);
+    }
+  }
+
+  async function handleAddConfluenceSpace(space: ConfluenceSpace) {
+    setConfluenceLoading(true);
+    setConnectorError(null);
+    try {
+      await postJson<ConfluenceSpace, WorkspaceConfluenceSource>(
+        `/api/workspaces/${workspace.workspace_id}/confluence/sources`,
+        space,
+      );
+      setConnectorStatus(`${space.space_key} added to this workspace.`);
+      await loadConfluenceSources();
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    } finally {
+      setConfluenceLoading(false);
+    }
+  }
+
+  async function handleSyncConfluenceSource(sourceId: string) {
+    setConfluenceLoading(true);
+    setConnectorError(null);
+    try {
+      await postJson<undefined, WorkspaceConfluenceSource>(
+        `/api/workspaces/${workspace.workspace_id}/confluence/sources/${sourceId}/sync`,
+      );
+      setConnectorStatus("Confluence source synced.");
+      await loadConfluenceSources();
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+      await loadConfluenceSources();
+    } finally {
+      setConfluenceLoading(false);
+    }
+  }
+
+  async function handleRemoveConfluenceSource(sourceId: string) {
+    setConfluenceLoading(true);
+    setConnectorError(null);
+    try {
+      await deleteJson<WorkspaceConfluenceSource>(
+        `/api/workspaces/${workspace.workspace_id}/confluence/sources/${sourceId}`,
+      );
+      setConnectorStatus("Confluence source removed.");
+      await loadConfluenceSources();
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    } finally {
+      setConfluenceLoading(false);
+    }
+  }
+
   async function handleConnectorManagerToggle(member: WorkspaceMember) {
     setConnectorError(null);
     try {
@@ -793,7 +1156,6 @@ export function WorkspaceChatPage({
       return false;
     }
 
-    const position = getNextNodePosition(nodes, connections, Boolean(resolvedParentId), resolvedParentId);
     createNodeInFlightRef.current = true;
     setGraphMutating(true);
     setGraphStatus("Creating node...");
@@ -810,8 +1172,8 @@ export function WorkspaceChatPage({
       >(`/api/workspaces/${workspace.workspace_id}/graph/nodes`, {
         display_name: trimmedTitle,
         assigned_user_id: draft.assignedUserId,
-        x: position.x,
-        y: position.y,
+        x: 0,
+        y: 0,
         parent_node_id: resolvedParentId || undefined,
       });
       setNodes((currentNodes) => [...currentNodes, result.node]);
@@ -939,21 +1301,6 @@ export function WorkspaceChatPage({
     }
   }
 
-  async function persistNodePosition(nodeId: string, x: number, y: number) {
-    try {
-      const updatedNode = await patchJson<{ x: number; y: number }, HierarchyNode>(
-        `/api/workspaces/${workspace.workspace_id}/graph/nodes/${nodeId}`,
-        { x, y },
-      );
-      setNodes((currentNodes) =>
-        currentNodes.map((node) => (node.node_id === updatedNode.node_id ? updatedNode : node)),
-      );
-    } catch (error) {
-      handleApiError(error, setGraphStatus);
-      void loadGraph();
-    }
-  }
-
   function handleRepoSelect(repo: IndexedRepo) {
     setRepoId(repo.repo_id);
   }
@@ -974,40 +1321,13 @@ export function WorkspaceChatPage({
     });
   }
 
-  function handleNodeMouseDown(event: MouseEvent<HTMLButtonElement>, node: HierarchyNode) {
+  function handleNodeClick(event: MouseEvent<HTMLButtonElement>, node: HierarchyNode) {
     event.stopPropagation();
     setSelectedNodeId(node.node_id);
     setSidebarTab("details");
-    setDragState({
-      nodeId: node.node_id,
-      startClientX: event.clientX,
-      startClientY: event.clientY,
-      startX: node.x,
-      startY: node.y,
-      moved: false,
-    });
   }
 
   function handleBoardMouseMove(event: MouseEvent<HTMLDivElement>) {
-    if (dragState) {
-      const deltaX = event.clientX - dragState.startClientX;
-      const deltaY = event.clientY - dragState.startClientY;
-      const moved = dragState.moved || Math.hypot(deltaX, deltaY) >= DRAG_THRESHOLD_PX;
-      if (!moved) {
-        return;
-      }
-      const nextX = dragState.startX + deltaX / viewport.scale;
-      const nextY = dragState.startY + deltaY / viewport.scale;
-      if (!dragState.moved) {
-        setDragState({ ...dragState, moved: true });
-      }
-      setNodes((currentNodes) =>
-        currentNodes.map((node) =>
-          node.node_id === dragState.nodeId ? { ...node, x: nextX, y: nextY } : node,
-        ),
-      );
-      return;
-    }
     if (panState) {
       setViewport((currentViewport) => ({
         ...currentViewport,
@@ -1017,13 +1337,7 @@ export function WorkspaceChatPage({
     }
   }
 
-  function handleBoardMouseUp(event: MouseEvent<HTMLDivElement>) {
-    if (dragState?.moved) {
-      const nextX = dragState.startX + (event.clientX - dragState.startClientX) / viewport.scale;
-      const nextY = dragState.startY + (event.clientY - dragState.startClientY) / viewport.scale;
-      void persistNodePosition(dragState.nodeId, nextX, nextY);
-    }
-    setDragState(null);
+  function handleBoardMouseUp() {
     setPanState(null);
   }
 
@@ -1089,7 +1403,7 @@ export function WorkspaceChatPage({
         onBoardMouseDown={handleBoardMouseDown}
         onBoardMouseMove={handleBoardMouseMove}
         onBoardMouseUp={handleBoardMouseUp}
-        onNodeMouseDown={handleNodeMouseDown}
+        onNodeClick={handleNodeClick}
         onOpenChat={() => setChatOpen(true)}
       >
         {chatOpen ? (
@@ -1120,6 +1434,14 @@ export function WorkspaceChatPage({
           githubRepositories={githubRepositories}
           githubRepositoryQuery={githubRepositoryQuery}
           githubRepositoriesLoading={githubRepositoriesLoading}
+          bitbucketConnection={bitbucketConnection}
+          bitbucketRepositories={bitbucketRepositories}
+          bitbucketRepositoryQuery={bitbucketRepositoryQuery}
+          bitbucketLoading={bitbucketLoading}
+          gitlabConnection={gitlabConnection}
+          gitlabProjects={gitlabProjects}
+          gitlabProjectQuery={gitlabProjectQuery}
+          gitlabLoading={gitlabLoading}
           jiraConnection={jiraConnection}
           jiraSources={jiraSources}
           jiraProjects={jiraProjects}
@@ -1131,14 +1453,32 @@ export function WorkspaceChatPage({
           slackChannelQuery={slackChannelQuery}
           slackSelectedTeamId={slackSelectedTeamId}
           slackLoading={slackLoading}
+          linearConnection={linearConnection}
+          linearSources={linearSources}
+          linearSelectableSources={linearSelectableSources}
+          linearQuery={linearQuery}
+          linearLoading={linearLoading}
+          confluenceConnection={confluenceConnection}
+          confluenceSources={confluenceSources}
+          confluenceSpaces={confluenceSpaces}
+          confluenceQuery={confluenceQuery}
+          confluenceLoading={confluenceLoading}
           canManageWorkspace={workspace.can_manage}
           onRepoUrlChange={setConnectorRepoUrl}
           onGithubRepositoryQueryChange={setGithubRepositoryQuery}
           onGithubRepositorySearch={() => loadGithubRepositories(githubRepositoryQuery)}
+          onBitbucketRepositoryQueryChange={setBitbucketRepositoryQuery}
+          onBitbucketRepositorySearch={() => loadBitbucketRepositories(bitbucketRepositoryQuery)}
+          onGitlabProjectQueryChange={setGitlabProjectQuery}
+          onGitlabProjectSearch={() => loadGitlabProjects(gitlabProjectQuery)}
           onRefreshRepoChange={setConnectorRefreshRepo}
           onSubmit={handleGithubConnectorSubmit}
           onGithubConnect={handleGithubConnect}
           onGithubDisconnect={handleGithubDisconnect}
+          onBitbucketConnect={handleBitbucketConnect}
+          onBitbucketDisconnect={handleBitbucketDisconnect}
+          onGitlabConnect={handleGitlabConnect}
+          onGitlabDisconnect={handleGitlabDisconnect}
           onJiraConnect={handleJiraConnect}
           onJiraDisconnect={handleJiraDisconnect}
           onJiraProjectQueryChange={setJiraProjectQuery}
@@ -1154,6 +1494,20 @@ export function WorkspaceChatPage({
           onAddSlackChannel={handleAddSlackChannel}
           onSyncSlackSource={handleSyncSlackSource}
           onRemoveSlackSource={handleRemoveSlackSource}
+          onLinearConnect={handleLinearConnect}
+          onLinearDisconnect={handleLinearDisconnect}
+          onLinearQueryChange={setLinearQuery}
+          onLinearSearch={() => loadLinearSelectableSources(linearQuery)}
+          onAddLinearSource={handleAddLinearSource}
+          onSyncLinearSource={handleSyncLinearSource}
+          onRemoveLinearSource={handleRemoveLinearSource}
+          onConfluenceConnect={handleConfluenceConnect}
+          onConfluenceDisconnect={handleConfluenceDisconnect}
+          onConfluenceQueryChange={setConfluenceQuery}
+          onConfluenceSearch={() => loadConfluenceSpaces(confluenceQuery)}
+          onAddConfluenceSpace={handleAddConfluenceSpace}
+          onSyncConfluenceSource={handleSyncConfluenceSource}
+          onRemoveConfluenceSource={handleRemoveConfluenceSource}
           onConnectorManagerToggle={handleConnectorManagerToggle}
           onClose={closeConnectorModal}
         />
@@ -1180,32 +1534,6 @@ function createMessage(
   };
 }
 
-function getNextNodePosition(
-  nodes: HierarchyNode[],
-  connections: HierarchyConnection[],
-  hasParent: boolean,
-  parentNodeId: string,
-): { x: number; y: number } {
-  if (!hasParent) {
-    const rootCount = nodes.filter(
-      (node) => !connections.some((connection) => connection.child_node_id === node.node_id),
-    ).length;
-    return { x: 80 + rootCount * 240, y: 80 };
-  }
-
-  const parent = nodes.find((node) => node.node_id === parentNodeId);
-  if (!parent) {
-    return { x: 80, y: 220 };
-  }
-  const siblingCount = connections.filter(
-    (connection) => connection.parent_node_id === parentNodeId,
-  ).length;
-  return {
-    x: parent.x + (siblingCount % 5) * 210 - 210,
-    y: parent.y + 150 + Math.floor(siblingCount / 5) * 120,
-  };
-}
-
 function getVisibleNodes(
   nodes: HierarchyNode[],
   viewport: Viewport,
@@ -1227,6 +1555,80 @@ function getVisibleNodes(
         node.y + NODE_HEIGHT >= minY &&
         node.y <= maxY),
   );
+}
+
+function layoutHierarchyNodes(
+  nodes: HierarchyNode[],
+  connections: HierarchyConnection[],
+): HierarchyNode[] {
+  if (!nodes.length) {
+    return nodes;
+  }
+
+  const nodeIds = new Set(nodes.map((node) => node.node_id));
+  const childrenByParent = new Map<string, string[]>();
+  const parentByChild = new Map<string, string>();
+
+  for (const connection of connections) {
+    if (!nodeIds.has(connection.parent_node_id) || !nodeIds.has(connection.child_node_id)) {
+      continue;
+    }
+    childrenByParent.set(connection.parent_node_id, [
+      ...(childrenByParent.get(connection.parent_node_id) ?? []),
+      connection.child_node_id,
+    ]);
+    parentByChild.set(connection.child_node_id, connection.parent_node_id);
+  }
+
+  const nodeById = new Map(nodes.map((node) => [node.node_id, node]));
+  const roots = nodes.filter((node) => !parentByChild.has(node.node_id));
+  const subtreeSlots = new Map<string, number>();
+
+  function measureSubtree(nodeId: string): number {
+    const cachedSlots = subtreeSlots.get(nodeId);
+    if (cachedSlots !== undefined) {
+      return cachedSlots;
+    }
+
+    const childIds = childrenByParent.get(nodeId) ?? [];
+    const slots = Math.max(
+      1,
+      childIds.reduce((total, childId) => total + measureSubtree(childId), 0),
+    );
+    subtreeSlots.set(nodeId, slots);
+    return slots;
+  }
+
+  const positionedNodes = new Map<string, HierarchyNode>();
+
+  function placeSubtree(nodeId: string, leftSlot: number, depth: number) {
+    const node = nodeById.get(nodeId);
+    if (!node) {
+      return;
+    }
+
+    const slots = measureSubtree(nodeId);
+    const centerSlot = leftSlot + (slots - 1) / 2;
+    positionedNodes.set(nodeId, {
+      ...node,
+      x: GRAPH_LAYOUT_START_X + centerSlot * GRAPH_LAYOUT_HORIZONTAL_GAP,
+      y: GRAPH_LAYOUT_START_Y + depth * GRAPH_LAYOUT_VERTICAL_GAP,
+    });
+
+    let childLeftSlot = leftSlot;
+    for (const childId of childrenByParent.get(nodeId) ?? []) {
+      placeSubtree(childId, childLeftSlot, depth + 1);
+      childLeftSlot += measureSubtree(childId);
+    }
+  }
+
+  let nextRootSlot = 0;
+  for (const root of roots) {
+    placeSubtree(root.node_id, nextRootSlot, 0);
+    nextRootSlot += measureSubtree(root.node_id) + GRAPH_LAYOUT_ROOT_GAP;
+  }
+
+  return nodes.map((node) => positionedNodes.get(node.node_id) ?? node);
 }
 
 function findParentNodeId(
