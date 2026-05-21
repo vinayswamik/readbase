@@ -41,14 +41,15 @@ def storage_dirs(workspace_id: str | None = None) -> tuple[Path, Path]:
     return repos_dir, indexes_dir
 
 
-# Turn a GitHub URL into a safe local folder/index name. The short hash avoids
+# Turn a hosted Git URL into a safe local folder/index name. The short hash avoids
 # collisions when similar repo paths or URL forms point to different sources.
 def repo_id_from_url(repo_url: str) -> str:
     parsed = urlparse(repo_url.strip())
     if parsed.scheme not in {"http", "https", "git", "ssh"}:
-        raise RepoError("Use a full GitHub repository URL.")
-    if "github.com" not in parsed.netloc.lower():
-        raise RepoError("This first version only accepts github.com repository URLs.")
+        raise RepoError("Use a full repository URL.")
+    host = (parsed.hostname or "").lower()
+    if host not in {"github.com", "bitbucket.org", "gitlab.com"}:
+        raise RepoError("Use a github.com, bitbucket.org, or gitlab.com repository URL.")
 
     path = parsed.path.strip("/")
     if path.endswith(".git"):
@@ -73,6 +74,7 @@ def index_repo(
     refresh: bool = False,
     workspace_id: str | None = None,
     github_token: str | None = None,
+    auth_token: str | None = None,
 ) -> dict:
     ensure_data_dirs()
     repos_dir, indexes_dir = storage_dirs(workspace_id)
@@ -90,7 +92,7 @@ def index_repo(
 
     # Reuse an existing clone unless refresh was requested.
     if not repo_path.exists():
-        clone_repo(repo_url, repo_path, github_token=github_token)
+        clone_repo(repo_url, repo_path, auth_token=auth_token or github_token)
 
     chunks, file_count = chunk_repository(repo_path)
     index = build_index(
@@ -153,15 +155,19 @@ def index_local_repo(
     }
 
 
-# Shell out to git instead of implementing GitHub download logic ourselves.
+# Shell out to git instead of implementing provider download logic ourselves.
 # `--depth 1` keeps the first version fast by skipping full commit history.
-def clone_repo(repo_url: str, repo_path: Path, github_token: str | None = None) -> None:
+def clone_repo(repo_url: str, repo_path: Path, github_token: str | None = None, auth_token: str | None = None) -> None:
+    token = auth_token or github_token
     command = ["git", "clone", "--depth", "1", repo_url, str(repo_path)]
-    if github_token:
+    if token:
+        host = (urlparse(repo_url).hostname or "").lower()
+        if not host:
+            raise RepoError("Use a full repository URL.")
         command = [
             "git",
             "-c",
-            f"http.https://github.com/.extraheader=AUTHORIZATION: bearer {github_token}",
+            f"http.https://{host}/.extraheader=AUTHORIZATION: bearer {token}",
             "clone",
             "--depth",
             "1",

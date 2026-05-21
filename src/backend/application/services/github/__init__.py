@@ -10,6 +10,7 @@ from .auth import (
 )
 from .constants import GITHUB_OAUTH_STATE_TTL_SECONDS
 from .permissions import (
+    can_user_access_github_repo,
     filter_repo_matches_for_user,
     require_user_can_access_github_repo,
 )
@@ -18,6 +19,7 @@ from .repos import list_visible_github_repositories
 __all__ = [
     "GITHUB_OAUTH_STATE_TTL_SECONDS",
     "build_github_authorize_url",
+    "can_user_access_github_repo",
     "create_github_oauth_state",
     "disconnect_github",
     "exchange_github_code_for_connection",

@@ -1,8 +1,14 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 
 import type {
   AuthUser,
+  BitbucketConnection,
+  BitbucketRepository,
+  ConfluenceConnection,
+  ConfluenceSpace,
+  GitlabConnection,
+  GitlabProject,
   GithubConnection,
   GithubRepository,
   HierarchyAssignableUser,
@@ -10,10 +16,14 @@ import type {
   IndexedRepo,
   JiraConnection,
   JiraProject,
+  LinearConnection,
+  LinearSelectableSource,
   SlackChannel,
   SlackConnection,
   Workspace,
   WorkspaceJiraSource,
+  WorkspaceConfluenceSource,
+  WorkspaceLinearSource,
   WorkspaceSlackSource,
   WorkspaceMember,
 } from "../types";
@@ -21,7 +31,8 @@ import type {
 const MAX_PICKER_RESULTS = 20;
 
 export type SidebarTab = "repository" | "graph" | "details";
-export type ConnectorId = "jira" | "slack" | "github" | "confluence" | "linear";
+export type ConnectorId = "jira" | "slack" | "github" | "bitbucket" | "gitlab" | "confluence" | "linear";
+export type ConnectorCategoryId = "codebase" | "project-management" | "discussions";
 
 export type CreateNodeDraft = {
   displayName: string;
@@ -32,14 +43,23 @@ export type CreateNodeDraft = {
 export type ConnectorConfig = {
   id: ConnectorId;
   name: string;
+  category: ConnectorCategoryId;
 };
 
 export const CONNECTORS: ConnectorConfig[] = [
-  { id: "jira", name: "Jira" },
-  { id: "slack", name: "Slack" },
-  { id: "github", name: "GitHub" },
-  { id: "confluence", name: "Confluence" },
-  { id: "linear", name: "Linear" },
+  { id: "github", name: "GitHub", category: "codebase" },
+  { id: "gitlab", name: "GitLab", category: "codebase" },
+  { id: "bitbucket", name: "Bitbucket", category: "codebase" },
+  { id: "confluence", name: "Confluence", category: "project-management" },
+  { id: "jira", name: "Jira", category: "project-management" },
+  { id: "linear", name: "Linear", category: "project-management" },
+  { id: "slack", name: "Slack", category: "discussions" },
+];
+
+const CONNECTOR_CATEGORY_ORDER: Array<{ id: ConnectorCategoryId; label: string }> = [
+  { id: "codebase", label: "Codebase" },
+  { id: "project-management", label: "Project management" },
+  { id: "discussions", label: "Discussions" },
 ];
 
 export function WorkspaceLeftPanel({
@@ -301,6 +321,14 @@ export function ConnectorSetupModal({
   githubRepositories,
   githubRepositoryQuery,
   githubRepositoriesLoading,
+  bitbucketConnection,
+  bitbucketRepositories,
+  bitbucketRepositoryQuery,
+  bitbucketLoading,
+  gitlabConnection,
+  gitlabProjects,
+  gitlabProjectQuery,
+  gitlabLoading,
   jiraConnection,
   jiraSources,
   jiraProjects,
@@ -312,14 +340,32 @@ export function ConnectorSetupModal({
   slackChannelQuery,
   slackSelectedTeamId,
   slackLoading,
+  linearConnection,
+  linearSources,
+  linearSelectableSources,
+  linearQuery,
+  linearLoading,
+  confluenceConnection,
+  confluenceSources,
+  confluenceSpaces,
+  confluenceQuery,
+  confluenceLoading,
   canManageWorkspace,
   onRepoUrlChange,
   onGithubRepositoryQueryChange,
   onGithubRepositorySearch,
+  onBitbucketRepositoryQueryChange,
+  onBitbucketRepositorySearch,
+  onGitlabProjectQueryChange,
+  onGitlabProjectSearch,
   onRefreshRepoChange,
   onSubmit,
   onGithubConnect,
   onGithubDisconnect,
+  onBitbucketConnect,
+  onBitbucketDisconnect,
+  onGitlabConnect,
+  onGitlabDisconnect,
   onJiraConnect,
   onJiraDisconnect,
   onJiraProjectQueryChange,
@@ -335,6 +381,20 @@ export function ConnectorSetupModal({
   onAddSlackChannel,
   onSyncSlackSource,
   onRemoveSlackSource,
+  onLinearConnect,
+  onLinearDisconnect,
+  onLinearQueryChange,
+  onLinearSearch,
+  onAddLinearSource,
+  onSyncLinearSource,
+  onRemoveLinearSource,
+  onConfluenceConnect,
+  onConfluenceDisconnect,
+  onConfluenceQueryChange,
+  onConfluenceSearch,
+  onAddConfluenceSpace,
+  onSyncConfluenceSource,
+  onRemoveConfluenceSource,
   onConnectorManagerToggle,
   onClose,
 }: {
@@ -350,6 +410,14 @@ export function ConnectorSetupModal({
   githubRepositories: GithubRepository[];
   githubRepositoryQuery: string;
   githubRepositoriesLoading: boolean;
+  bitbucketConnection: BitbucketConnection | null;
+  bitbucketRepositories: BitbucketRepository[];
+  bitbucketRepositoryQuery: string;
+  bitbucketLoading: boolean;
+  gitlabConnection: GitlabConnection | null;
+  gitlabProjects: GitlabProject[];
+  gitlabProjectQuery: string;
+  gitlabLoading: boolean;
   jiraConnection: JiraConnection | null;
   jiraSources: WorkspaceJiraSource[];
   jiraProjects: JiraProject[];
@@ -361,14 +429,32 @@ export function ConnectorSetupModal({
   slackChannelQuery: string;
   slackSelectedTeamId: string;
   slackLoading: boolean;
+  linearConnection: LinearConnection | null;
+  linearSources: WorkspaceLinearSource[];
+  linearSelectableSources: LinearSelectableSource[];
+  linearQuery: string;
+  linearLoading: boolean;
+  confluenceConnection: ConfluenceConnection | null;
+  confluenceSources: WorkspaceConfluenceSource[];
+  confluenceSpaces: ConfluenceSpace[];
+  confluenceQuery: string;
+  confluenceLoading: boolean;
   canManageWorkspace: boolean;
   onRepoUrlChange: (repoUrl: string) => void;
   onGithubRepositoryQueryChange: (query: string) => void;
   onGithubRepositorySearch: () => void;
+  onBitbucketRepositoryQueryChange: (query: string) => void;
+  onBitbucketRepositorySearch: () => void;
+  onGitlabProjectQueryChange: (query: string) => void;
+  onGitlabProjectSearch: () => void;
   onRefreshRepoChange: (refreshRepo: boolean) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onGithubConnect: () => void;
   onGithubDisconnect: () => void;
+  onBitbucketConnect: () => void;
+  onBitbucketDisconnect: () => void;
+  onGitlabConnect: () => void;
+  onGitlabDisconnect: () => void;
   onJiraConnect: () => void;
   onJiraDisconnect: () => void;
   onJiraProjectQueryChange: (query: string) => void;
@@ -384,12 +470,38 @@ export function ConnectorSetupModal({
   onAddSlackChannel: (channel: SlackChannel) => void;
   onSyncSlackSource: (sourceId: string) => void;
   onRemoveSlackSource: (sourceId: string) => void;
+  onLinearConnect: () => void;
+  onLinearDisconnect: () => void;
+  onLinearQueryChange: (query: string) => void;
+  onLinearSearch: () => void;
+  onAddLinearSource: (source: LinearSelectableSource) => void;
+  onSyncLinearSource: (sourceId: string) => void;
+  onRemoveLinearSource: (sourceId: string) => void;
+  onConfluenceConnect: () => void;
+  onConfluenceDisconnect: () => void;
+  onConfluenceQueryChange: (query: string) => void;
+  onConfluenceSearch: () => void;
+  onAddConfluenceSpace: (space: ConfluenceSpace) => void;
+  onSyncConfluenceSource: (sourceId: string) => void;
+  onRemoveConfluenceSource: (sourceId: string) => void;
   onConnectorManagerToggle: (member: WorkspaceMember) => void;
   onClose: () => void;
 }) {
   const isGithub = connector.id === "github";
+  const isBitbucket = connector.id === "bitbucket";
+  const isGitlab = connector.id === "gitlab";
   const isJira = connector.id === "jira";
   const isSlack = connector.id === "slack";
+  const isLinear = connector.id === "linear";
+  const isConfluence = connector.id === "confluence";
+  const isRepoConnector = isGithub || isBitbucket || isGitlab;
+  const repoConnection = isGithub ? githubConnection : isBitbucket ? bitbucketConnection : gitlabConnection;
+  const repoConnectedLabel = isGithub
+    ? githubConnection?.login || "GitHub connected"
+    : isBitbucket
+      ? bitbucketConnection?.display_name || bitbucketConnection?.username || "Bitbucket connected"
+      : gitlabConnection?.name || gitlabConnection?.username || "GitLab connected";
+  const repoConfigured = repoConnection?.configured !== false;
 
   return (
     <div
@@ -415,48 +527,57 @@ export function ConnectorSetupModal({
           </button>
         </header>
 
-        {isGithub ? (
+        {isRepoConnector ? (
           <form className="connector-modal-body" onSubmit={onSubmit}>
             <div className="connector-account-row">
               <div>
-                <strong>{githubConnection?.connected ? githubConnection.login || "GitHub connected" : "GitHub account"}</strong>
+                <strong>{repoConnection?.connected ? repoConnectedLabel : `${connector.name} account`}</strong>
                 <span>
-                  {githubConnection?.connected
-                    ? githubConnection.name || "Repository answers are filtered by this GitHub account."
-                    : githubConnection?.configured === false
-                      ? "GitHub OAuth is not configured on the backend."
-                    : "Connect GitHub before indexing or answering from GitHub repositories."}
+                  {repoConnection?.connected
+                    ? `Repository answers are filtered by this ${connector.name} account.`
+                    : !repoConfigured
+                      ? `${connector.name} OAuth is not configured on the backend.`
+                    : `Connect ${connector.name} before indexing or answering from its repositories.`}
                 </span>
               </div>
-              {githubConnection?.connected ? (
-                <button type="button" className="secondary-action-button" disabled={indexing} onClick={onGithubDisconnect}>
+              {repoConnection?.connected ? (
+                <button
+                  type="button"
+                  className="secondary-action-button"
+                  disabled={indexing || bitbucketLoading || gitlabLoading}
+                  onClick={isGithub ? onGithubDisconnect : isBitbucket ? onBitbucketDisconnect : onGitlabDisconnect}
+                >
                   Disconnect
                 </button>
               ) : (
                 <button
                   type="button"
                   className="primary-button"
-                  disabled={indexing || githubConnection?.configured === false}
-                  onClick={onGithubConnect}
+                  disabled={indexing || !repoConfigured}
+                  onClick={isGithub ? onGithubConnect : isBitbucket ? onBitbucketConnect : onGitlabConnect}
                 >
-                  Connect GitHub
+                  Connect {connector.name}
                 </button>
               )}
             </div>
 
-            {githubConnection?.connected ? (
+            {repoConnection?.connected ? (
               <>
                 <div className="connector-search-row">
                   <input
-                    value={githubRepositoryQuery}
-                    placeholder="Search GitHub repositories"
-                    onChange={(event) => onGithubRepositoryQueryChange(event.target.value)}
+                    value={isGithub ? githubRepositoryQuery : isBitbucket ? bitbucketRepositoryQuery : gitlabProjectQuery}
+                    placeholder={`Search ${connector.name} repositories`}
+                    onChange={(event) =>
+                      (isGithub ? onGithubRepositoryQueryChange : isBitbucket ? onBitbucketRepositoryQueryChange : onGitlabProjectQueryChange)(
+                        event.target.value,
+                      )
+                    }
                   />
                   <button
                     type="button"
                     className="secondary-action-button"
-                    disabled={githubRepositoriesLoading}
-                    onClick={onGithubRepositorySearch}
+                    disabled={githubRepositoriesLoading || bitbucketLoading || gitlabLoading}
+                    onClick={isGithub ? onGithubRepositorySearch : isBitbucket ? onBitbucketRepositorySearch : onGitlabProjectSearch}
                   >
                     Search
                   </button>
@@ -464,26 +585,25 @@ export function ConnectorSetupModal({
 
                 <section className="connector-access-list">
                   <h3>Available repositories</h3>
-                  {githubRepositoriesLoading && !githubRepositories.length ? (
-                    <div className="status-text compact">Loading GitHub repositories...</div>
+                  {(githubRepositoriesLoading || bitbucketLoading || gitlabLoading) &&
+                  !(isGithub ? githubRepositories.length : isBitbucket ? bitbucketRepositories.length : gitlabProjects.length) ? (
+                    <div className="status-text compact">Loading {connector.name} repositories...</div>
                   ) : null}
-                  {!githubRepositoriesLoading && !githubRepositories.length ? (
-                    <div className="status-text compact">No visible GitHub repositories found.</div>
+                  {!githubRepositoriesLoading && !bitbucketLoading && !gitlabLoading &&
+                  !(isGithub ? githubRepositories.length : isBitbucket ? bitbucketRepositories.length : gitlabProjects.length) ? (
+                    <div className="status-text compact">No visible {connector.name} repositories found.</div>
                   ) : null}
-                  {githubRepositories.slice(0, 8).map((repository) => (
-                    <div className="connector-access-row" key={repository.id || repository.full_name}>
-                      <span>{repository.full_name}</span>
-                      <strong>{repository.private ? "Private" : "Public"}</strong>
-                      <button
-                        type="button"
-                        className="secondary-action-button compact-button"
-                        disabled={indexing}
-                        onClick={() => onRepoUrlChange(repository.html_url)}
-                      >
-                        Select
-                      </button>
-                    </div>
-                  ))}
+                  {isGithub
+                    ? githubRepositories.slice(0, 8).map((repository) => (
+                        <RepoChoiceRow key={repository.id || repository.full_name} label={repository.full_name} isPrivate={repository.private} url={repository.html_url} disabled={indexing} onSelect={onRepoUrlChange} />
+                      ))
+                    : isBitbucket
+                      ? bitbucketRepositories.slice(0, 8).map((repository) => (
+                          <RepoChoiceRow key={repository.id || repository.full_name} label={repository.full_name} isPrivate={repository.private} url={repository.clone_url || repository.html_url} disabled={indexing} onSelect={onRepoUrlChange} />
+                        ))
+                      : gitlabProjects.slice(0, 8).map((project) => (
+                          <RepoChoiceRow key={project.id || project.path_with_namespace} label={project.path_with_namespace} isPrivate={project.visibility !== "public"} url={project.clone_url || project.web_url} disabled={indexing} onSelect={onRepoUrlChange} />
+                        ))}
                 </section>
               </>
             ) : null}
@@ -493,7 +613,7 @@ export function ConnectorSetupModal({
               id="connectorRepoUrl"
               type="url"
               value={repoUrl}
-              placeholder="https://github.com/owner/repo"
+              placeholder={isBitbucket ? "https://bitbucket.org/workspace/repo" : isGitlab ? "https://gitlab.com/group/project" : "https://github.com/owner/repo"}
               required
               onChange={(event) => onRepoUrlChange(event.target.value)}
             />
@@ -529,7 +649,7 @@ export function ConnectorSetupModal({
               <button type="button" className="secondary-action-button" onClick={onClose}>
                 Cancel
               </button>
-              <button type="submit" className="primary-button" disabled={indexing || !repoUrl.trim() || !githubConnection?.connected}>
+              <button type="submit" className="primary-button" disabled={indexing || !repoUrl.trim() || !repoConnection?.connected}>
                 {indexing ? "Indexing..." : "Index repo"}
               </button>
             </div>
@@ -773,6 +893,114 @@ export function ConnectorSetupModal({
               </button>
             </div>
           </div>
+        ) : isLinear ? (
+          <KnowledgeConnectorBody
+            connectorName="Linear"
+            connected={Boolean(linearConnection?.connected)}
+            configured={linearConnection?.configured !== false}
+            accountTitle={linearConnection?.name || "Linear connected"}
+            accountDetail={linearConnection?.email || linearConnection?.workspace_name || "Issues are filtered by this Linear account."}
+            disconnectedDetail="Connect Linear before adding teams or projects."
+            query={linearQuery}
+            queryPlaceholder="Search Linear teams or projects"
+            loading={linearLoading}
+            availableTitle="Available teams and projects"
+            emptyAvailableText="No visible Linear teams or projects found."
+            workspaceTitle="Workspace Linear sources"
+            emptyWorkspaceText="No Linear sources connected to this workspace."
+            members={members}
+            loadingMembers={loadingMembers}
+            canManageWorkspace={canManageWorkspace}
+            error={error}
+            status={status}
+            onConnect={onLinearConnect}
+            onDisconnect={onLinearDisconnect}
+            onQueryChange={onLinearQueryChange}
+            onSearch={onLinearSearch}
+            onConnectorManagerToggle={onConnectorManagerToggle}
+            onClose={onClose}
+            availableRows={linearSelectableSources.slice(0, 8).map((source) => {
+              const alreadyAdded = linearSources.some(
+                (current) =>
+                  current.linear_team_id === source.team_id &&
+                  (current.linear_project_id || "") === (source.project_id || ""),
+              );
+              return (
+                <div className="connector-access-row" key={`${source.team_id}:${source.project_id || "team"}`}>
+                  <span>{source.project_name || source.team_name}</span>
+                  <strong>{source.project_id ? "Project" : "Team"}</strong>
+                  <button type="button" className="secondary-action-button compact-button" disabled={linearLoading || alreadyAdded} onClick={() => onAddLinearSource(source)}>
+                    {alreadyAdded ? "Added" : "Add"}
+                  </button>
+                </div>
+              );
+            })}
+            workspaceRows={linearSources.map((source) => (
+              <div className="connector-access-row" key={source.source_id}>
+                <span>{source.project_name || source.team_name}</span>
+                <strong>{source.sync_status}</strong>
+                <button type="button" className="secondary-action-button compact-button" disabled={linearLoading} onClick={() => onSyncLinearSource(source.source_id)}>
+                  Sync
+                </button>
+                <button type="button" className="danger-button compact-button" disabled={linearLoading} onClick={() => onRemoveLinearSource(source.source_id)}>
+                  Remove
+                </button>
+              </div>
+            ))}
+          />
+        ) : isConfluence ? (
+          <KnowledgeConnectorBody
+            connectorName="Confluence"
+            connected={Boolean(confluenceConnection?.connected)}
+            configured={confluenceConnection?.configured !== false}
+            accountTitle={confluenceConnection?.account_name || "Confluence connected"}
+            accountDetail={confluenceConnection?.account_email || `${confluenceConnection?.sites.length || 0} site${confluenceConnection?.sites.length === 1 ? "" : "s"} connected`}
+            disconnectedDetail="Connect Confluence before adding spaces."
+            query={confluenceQuery}
+            queryPlaceholder="Search Confluence spaces"
+            loading={confluenceLoading}
+            availableTitle="Available spaces"
+            emptyAvailableText="No visible Confluence spaces found."
+            workspaceTitle="Workspace Confluence sources"
+            emptyWorkspaceText="No Confluence spaces connected to this workspace."
+            members={members}
+            loadingMembers={loadingMembers}
+            canManageWorkspace={canManageWorkspace}
+            error={error}
+            status={status}
+            onConnect={onConfluenceConnect}
+            onDisconnect={onConfluenceDisconnect}
+            onQueryChange={onConfluenceQueryChange}
+            onSearch={onConfluenceSearch}
+            onConnectorManagerToggle={onConnectorManagerToggle}
+            onClose={onClose}
+            availableRows={confluenceSpaces.slice(0, 8).map((space) => {
+              const alreadyAdded = confluenceSources.some(
+                (source) => source.cloud_id === space.cloud_id && source.space_id === space.space_id,
+              );
+              return (
+                <div className="connector-access-row" key={`${space.cloud_id}:${space.space_id}`}>
+                  <span>{space.space_key} · {space.space_name}</span>
+                  <strong>{space.site_name}</strong>
+                  <button type="button" className="secondary-action-button compact-button" disabled={confluenceLoading || alreadyAdded} onClick={() => onAddConfluenceSpace(space)}>
+                    {alreadyAdded ? "Added" : "Add"}
+                  </button>
+                </div>
+              );
+            })}
+            workspaceRows={confluenceSources.map((source) => (
+              <div className="connector-access-row" key={source.source_id}>
+                <span>{source.space_key} · {source.space_name}</span>
+                <strong>{source.sync_status}</strong>
+                <button type="button" className="secondary-action-button compact-button" disabled={confluenceLoading} onClick={() => onSyncConfluenceSource(source.source_id)}>
+                  Sync
+                </button>
+                <button type="button" className="danger-button compact-button" disabled={confluenceLoading} onClick={() => onRemoveConfluenceSource(source.source_id)}>
+                  Remove
+                </button>
+              </div>
+            ))}
+          />
         ) : (
           <div className="connector-modal-body">
             <div className="empty-panel-state">
@@ -790,6 +1018,156 @@ export function ConnectorSetupModal({
   );
 }
 
+function KnowledgeConnectorBody({
+  connectorName,
+  connected,
+  configured,
+  accountTitle,
+  accountDetail,
+  disconnectedDetail,
+  query,
+  queryPlaceholder,
+  loading,
+  availableTitle,
+  emptyAvailableText,
+  workspaceTitle,
+  emptyWorkspaceText,
+  members,
+  loadingMembers,
+  canManageWorkspace,
+  error,
+  status,
+  availableRows,
+  workspaceRows,
+  onConnect,
+  onDisconnect,
+  onQueryChange,
+  onSearch,
+  onConnectorManagerToggle,
+  onClose,
+}: {
+  connectorName: string;
+  connected: boolean;
+  configured: boolean;
+  accountTitle: string;
+  accountDetail: string;
+  disconnectedDetail: string;
+  query: string;
+  queryPlaceholder: string;
+  loading: boolean;
+  availableTitle: string;
+  emptyAvailableText: string;
+  workspaceTitle: string;
+  emptyWorkspaceText: string;
+  members: WorkspaceMember[];
+  loadingMembers: boolean;
+  canManageWorkspace: boolean;
+  error: string | null;
+  status: string;
+  availableRows: ReactNode[];
+  workspaceRows: ReactNode[];
+  onConnect: () => void;
+  onDisconnect: () => void;
+  onQueryChange: (query: string) => void;
+  onSearch: () => void;
+  onConnectorManagerToggle: (member: WorkspaceMember) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="connector-modal-body">
+      <div className="connector-account-row">
+        <div>
+          <strong>{connected ? accountTitle : `${connectorName} account`}</strong>
+          <span>{connected ? accountDetail : configured ? disconnectedDetail : `${connectorName} OAuth is not configured on the backend.`}</span>
+        </div>
+        <button
+          type="button"
+          className={connected ? "secondary-action-button" : "primary-button"}
+          disabled={loading || !configured}
+          onClick={connected ? onDisconnect : onConnect}
+        >
+          {connected ? "Disconnect" : `Connect ${connectorName}`}
+        </button>
+      </div>
+
+      {connected ? (
+        <>
+          <div className="connector-search-row">
+            <input value={query} placeholder={queryPlaceholder} onChange={(event) => onQueryChange(event.target.value)} />
+            <button type="button" className="secondary-action-button" disabled={loading} onClick={onSearch}>
+              Search
+            </button>
+          </div>
+          <section className="connector-access-list">
+            <h3>{availableTitle}</h3>
+            {loading && !availableRows.length ? <div className="status-text compact">Loading...</div> : null}
+            {!loading && !availableRows.length ? <div className="status-text compact">{emptyAvailableText}</div> : null}
+            {availableRows}
+          </section>
+          <section className="connector-access-list">
+            <h3>Connector managers</h3>
+            {loadingMembers ? <div className="status-text compact">Loading workspace users...</div> : null}
+            {members.map((member) => (
+              <label className="connector-access-row" key={member.email}>
+                <input
+                  type="checkbox"
+                  checked={member.connector_manager}
+                  disabled={!canManageWorkspace || member.is_owner}
+                  onChange={() => onConnectorManagerToggle(member)}
+                />
+                <span>{member.email}</span>
+                <strong>{member.is_owner ? "Owner" : member.connector_manager ? "Manager" : "Member"}</strong>
+              </label>
+            ))}
+          </section>
+          <section className="connector-access-list">
+            <h3>{workspaceTitle}</h3>
+            {!workspaceRows.length ? <div className="status-text compact">{emptyWorkspaceText}</div> : null}
+            {workspaceRows}
+          </section>
+        </>
+      ) : null}
+
+      {error ? <div className="status-text error-text">{error}</div> : null}
+      {status ? <div className="status-text">{status}</div> : null}
+      <div className="connector-modal-actions">
+        <button type="button" className="primary-button" onClick={onClose}>
+          Done
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function RepoChoiceRow({
+  label,
+  isPrivate,
+  url,
+  disabled,
+  onSelect,
+}: {
+  label: string;
+  isPrivate: boolean;
+  url: string;
+  disabled: boolean;
+  onSelect: (repoUrl: string) => void;
+}) {
+  return (
+    <div className="connector-access-row">
+      <span>{label}</span>
+      <strong>{isPrivate ? "Private" : "Public"}</strong>
+      <button
+        type="button"
+        className="secondary-action-button compact-button"
+        disabled={disabled || !url}
+        onClick={() => onSelect(url)}
+      >
+        Select
+      </button>
+    </div>
+  );
+}
+
 function ConnectorPanel({
   connectors,
   onOpen,
@@ -798,6 +1176,18 @@ function ConnectorPanel({
   onOpen: (connectorId: ConnectorId) => void;
 }) {
   const [open, setOpen] = useState(true);
+  const groupedConnectors = useMemo(() => {
+    const connectorsByCategory = new Map<ConnectorCategoryId, ConnectorConfig[]>();
+    for (const connector of connectors) {
+      const currentConnectors = connectorsByCategory.get(connector.category) || [];
+      currentConnectors.push(connector);
+      connectorsByCategory.set(connector.category, currentConnectors);
+    }
+    return CONNECTOR_CATEGORY_ORDER.map((category) => ({
+      ...category,
+      connectors: connectorsByCategory.get(category.id) || [],
+    })).filter((category) => category.connectors.length);
+  }, [connectors]);
 
   return (
     <section className="connector-panel" aria-labelledby="connectors-heading">
@@ -815,16 +1205,21 @@ function ConnectorPanel({
       </button>
       {open ? (
         <div className="connector-list" id="connector-list">
-          {connectors.map((connector) => (
-            <button
-              type="button"
-              className="connector-row connector-open"
-              key={connector.id}
-              onClick={() => onOpen(connector.id)}
-            >
-              <ConnectorLogo connectorId={connector.id} />
-              <span>{connector.name}</span>
-            </button>
+          {groupedConnectors.map((group) => (
+            <div className="connector-category-group" key={group.id}>
+              <div className="connector-category-heading">{group.label}</div>
+              {group.connectors.map((connector) => (
+                <button
+                  type="button"
+                  className="connector-row connector-open"
+                  key={connector.id}
+                  onClick={() => onOpen(connector.id)}
+                >
+                  <ConnectorLogo connectorId={connector.id} />
+                  <span>{connector.name}</span>
+                </button>
+              ))}
+            </div>
           ))}
         </div>
       ) : null}

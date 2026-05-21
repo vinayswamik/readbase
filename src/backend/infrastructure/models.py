@@ -380,3 +380,18 @@ class HierarchyConnection(Base):
     )
     created_by_user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.user_id"), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+from src.backend.infrastructure.connector_models import (  # noqa: E402,F401
+    BitbucketUserConnection,
+    ConfluenceIndexedItem,
+    ConfluenceUserConnection,
+    ConfluenceUserSite,
+    ConfluenceVisibilityCache,
+    GitlabUserConnection,
+    LinearIndexedItem,
+    LinearUserConnection,
+    LinearVisibilityCache,
+    WorkspaceConfluenceSource,
+    WorkspaceLinearSource,
+)

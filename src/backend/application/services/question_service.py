@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from src.backend.application.services.exceptions import ResourceNotFoundError, ValidationError
-from src.backend.application.services.github_service import filter_repo_matches_for_user
+from src.backend.application.services.confluence_service import filter_confluence_matches_for_user
 from src.backend.application.services.jira_service import filter_jira_matches_for_user
-from src.backend.application.services.repo_service import list_repositories
+from src.backend.application.services.linear_service import filter_linear_matches_for_user
+from src.backend.application.services.repo_service import filter_repo_matches_for_user, list_repositories
 from src.backend.application.services.slack_service import filter_slack_matches_for_user
 from src.backend.config.settings import DEFAULT_TOP_K
 from src.backend.infrastructure.generation.answerer import answer_question
-from src.backend.infrastructure.retrieval.retriever import index_exists, load_index, search, search_jira, search_slack
+from src.backend.infrastructure.retrieval.retriever import index_exists, load_index, search, search_confluence, search_jira, search_linear, search_slack
 
 
 def ask_repository_question(
@@ -42,11 +43,15 @@ def ask_repository_question(
     if workspace_id:
         matches.extend(search_jira(workspace_id, normalized_question, top_k=max(1, top_k)))
         matches.extend(search_slack(workspace_id, normalized_question, top_k=max(1, top_k)))
+        matches.extend(search_linear(workspace_id, normalized_question, top_k=max(1, top_k)))
+        matches.extend(search_confluence(workspace_id, normalized_question, top_k=max(1, top_k)))
     matches = sorted(matches, key=lambda match: float(match.get("score", 0.0)), reverse=True)[: max(1, top_k)]
     if user_id:
         matches = filter_repo_matches_for_user(user_id, matches)
         matches = filter_jira_matches_for_user(user_id, matches)
         matches = filter_slack_matches_for_user(user_id, matches)
+        matches = filter_linear_matches_for_user(user_id, matches)
+        matches = filter_confluence_matches_for_user(user_id, matches)
 
     answer = answer_question(normalized_question, matches)
     return {

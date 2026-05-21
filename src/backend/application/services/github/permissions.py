@@ -43,7 +43,7 @@ def require_user_can_access_github_repo(user_id: str, repo_url: str) -> None:
 
 def parse_github_repo_url(repo_url: str) -> tuple[str, str]:
     parsed = urlparse(repo_url.strip())
-    if parsed.netloc.lower() != "github.com":
+    if (parsed.hostname or "").lower() != "github.com":
         raise ValidationError("Use a github.com repository URL.")
     parts = [part for part in parsed.path.strip("/").split("/") if part]
     if len(parts) < 2:

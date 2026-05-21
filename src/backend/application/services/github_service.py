@@ -3,6 +3,7 @@ from __future__ import annotations
 from src.backend.application.services.github import (
     GITHUB_OAUTH_STATE_TTL_SECONDS,
     build_github_authorize_url,
+    can_user_access_github_repo,
     create_github_oauth_state,
     disconnect_github,
     exchange_github_code_for_connection,
@@ -16,6 +17,7 @@ from src.backend.application.services.github import (
 __all__ = [
     "GITHUB_OAUTH_STATE_TTL_SECONDS",
     "build_github_authorize_url",
+    "can_user_access_github_repo",
     "create_github_oauth_state",
     "disconnect_github",
     "exchange_github_code_for_connection",
