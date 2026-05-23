@@ -195,6 +195,25 @@ export interface SlackConnection {
   teams: SlackTeam[];
 }
 
+export interface TeamsTeam {
+  team_id: string;
+  display_name: string;
+  description?: string | null;
+  web_url?: string | null;
+}
+
+export interface TeamsConnection {
+  connected: boolean;
+  configured: boolean;
+  microsoft_user_id?: string | null;
+  tenant_id?: string | null;
+  display_name?: string | null;
+  user_principal_name?: string | null;
+  mail?: string | null;
+  scopes: string[];
+  teams: TeamsTeam[];
+}
+
 export interface SlackChannel {
   team_id: string;
   team_name: string;

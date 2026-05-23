@@ -21,7 +21,9 @@ from src.backend.infrastructure.database import init_database
 # Local dev bind address and where the frontend build writes browser assets.
 HOST = "127.0.0.1"
 PORT = 8000
-FRONTEND_DIST_DIR = Path(__file__).resolve().parent / "frontend" / "dist"
+PROJECT_ROOT = Path(__file__).resolve().parent
+FRONTEND_DIR = PROJECT_ROOT / "frontend"
+FRONTEND_DIST_DIR = FRONTEND_DIR / "dist"
 
 
 def create_app() -> FastAPI:
@@ -46,7 +48,7 @@ def frontend_root() -> Response:
     index_file = FRONTEND_DIST_DIR / "index.html"
     if not index_file.exists():
         return PlainTextResponse(
-            "Frontend build missing. Run `npm install` and `npm run build` from frontend/.",
+            "Frontend build missing. Run `python3 server.py` from the project root.",
             status_code=503,
         )
     return FileResponse(
@@ -101,8 +103,27 @@ def release_port(port: int) -> None:
     time.sleep(0.1)
 
 
-# CLI entry: `python server.py` starts uvicorn, the ASGI server FastAPI runs on.
+# CLI entry: `python3 server.py` builds the frontend and starts uvicorn.
+def build_frontend() -> None:
+    """Build the Vite frontend before serving it from FastAPI."""
+    if os.environ.get("READBASE_SKIP_FRONTEND_BUILD"):
+        return
+    if not (FRONTEND_DIR / "package.json").exists():
+        raise RuntimeError(f"Frontend package not found at {FRONTEND_DIR}")
+    try:
+        subprocess.run(
+            ["npm", "run", "build"],
+            cwd=FRONTEND_DIR,
+            check=True,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError("npm is required to build the frontend before starting Readbase.") from exc
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError("Frontend build failed. Fix the frontend errors and run again.") from exc
+
+
 def main() -> None:
+    build_frontend()
     release_port(PORT)
     print(f"Readbase running at http://{HOST}:{PORT}")
     uvicorn.run(app, host=HOST, port=PORT)

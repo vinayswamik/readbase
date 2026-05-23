@@ -215,6 +215,25 @@ class SlackChannelsResponse(BaseModel):
     channels: list[SlackChannelResponse]
 
 
+class TeamsTeamResponse(BaseModel):
+    team_id: str
+    display_name: str
+    description: str | None = None
+    web_url: str | None = None
+
+
+class TeamsConnectionResponse(BaseModel):
+    connected: bool
+    configured: bool = False
+    microsoft_user_id: str | None = None
+    tenant_id: str | None = None
+    display_name: str | None = None
+    user_principal_name: str | None = None
+    mail: str | None = None
+    scopes: list[str] = []
+    teams: list[TeamsTeamResponse] = []
+
+
 class AddWorkspaceSlackChannelRequest(BaseModel):
     team_id: str
     team_name: str

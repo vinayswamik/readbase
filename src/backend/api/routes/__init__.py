@@ -14,6 +14,7 @@ from src.backend.api.routes.linear import router as linear_router
 from src.backend.api.routes.questions import router as questions_router
 from src.backend.api.routes.repos import router as repos_router
 from src.backend.api.routes.slack import router as slack_router
+from src.backend.api.routes.teams import router as teams_router
 from src.backend.api.routes.workspaces import router as workspaces_router
 
 api_router = APIRouter(prefix="/api")
@@ -25,6 +26,7 @@ api_router.include_router(workspaces_router)
 api_router.include_router(hierarchy_graph_router)
 api_router.include_router(jira_router)
 api_router.include_router(slack_router)
+api_router.include_router(teams_router)
 api_router.include_router(linear_router)
 api_router.include_router(confluence_router)
 api_router.include_router(repos_router)

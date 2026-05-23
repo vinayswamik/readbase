@@ -31,7 +31,7 @@ import type {
 const MAX_PICKER_RESULTS = 20;
 
 export type SidebarTab = "repository" | "graph" | "details";
-export type ConnectorId = "jira" | "slack" | "github" | "bitbucket" | "gitlab" | "confluence" | "linear";
+export type ConnectorId = "jira" | "slack" | "teams" | "github" | "bitbucket" | "gitlab" | "confluence" | "linear";
 export type ConnectorCategoryId = "codebase" | "project-management" | "discussions";
 
 export type CreateNodeDraft = {
@@ -54,6 +54,7 @@ export const CONNECTORS: ConnectorConfig[] = [
   { id: "jira", name: "Jira", category: "project-management" },
   { id: "linear", name: "Linear", category: "project-management" },
   { id: "slack", name: "Slack", category: "discussions" },
+  { id: "teams", name: "Microsoft Teams", category: "discussions" },
 ];
 
 const CONNECTOR_CATEGORY_ORDER: Array<{ id: ConnectorCategoryId; label: string }> = [
@@ -1227,7 +1228,7 @@ function ConnectorPanel({
   );
 }
 
-function ConnectorLogo({ connectorId }: { connectorId: ConnectorId }) {
+export function ConnectorLogo({ connectorId }: { connectorId: ConnectorId }) {
   if (connectorId === "slack") {
     return (
       <span className="connector-logo" aria-hidden="true">
@@ -1245,6 +1246,21 @@ function ConnectorLogo({ connectorId }: { connectorId: ConnectorId }) {
     );
   }
 
+  if (connectorId === "teams") {
+    return (
+      <span className="connector-logo" aria-hidden="true">
+        <svg viewBox="0 0 32 32" focusable="false">
+          <rect x="12" y="7" width="16" height="17" rx="3.2" fill="#6264A7" />
+          <circle cx="23.8" cy="6.8" r="3.2" fill="#7B83EB" />
+          <circle cx="26.5" cy="14.2" r="2.5" fill="#5059C9" />
+          <path fill="#5059C9" d="M18.6 13.2h10.1v5.1a5 5 0 0 1-10.1 0z" />
+          <rect x="4" y="10" width="15.4" height="14.6" rx="2.2" fill="#4B53BC" />
+          <path fill="#fff" d="M8 14.1h7.4v1.7h-2.7v6.1h-2v-6.1H8z" />
+        </svg>
+      </span>
+    );
+  }
+
   if (connectorId === "github") {
     return (
       <span className="connector-logo" aria-hidden="true">
@@ -1253,6 +1269,30 @@ function ConnectorLogo({ connectorId }: { connectorId: ConnectorId }) {
             fill="#24292F"
             d="M16 2.5c-7.5 0-13.6 6-13.6 13.5 0 6 3.9 11.1 9.3 12.9.7.1.9-.3.9-.7v-2.4c-3.8.8-4.6-1.6-4.6-1.6-.6-1.5-1.5-1.9-1.5-1.9-1.2-.8.1-.8.1-.8 1.4.1 2.1 1.4 2.1 1.4 1.2 2.1 3.2 1.5 3.9 1.2.1-.9.5-1.5.9-1.8-3-.3-6.2-1.5-6.2-6.7 0-1.5.5-2.7 1.4-3.7-.1-.3-.6-1.7.1-3.6 0 0 1.1-.4 3.7 1.4 1.1-.3 2.2-.5 3.4-.5s2.3.2 3.4.5c2.6-1.8 3.7-1.4 3.7-1.4.7 1.9.3 3.3.1 3.6.9 1 1.4 2.2 1.4 3.7 0 5.2-3.2 6.4-6.2 6.7.5.4.9 1.3.9 2.6v3.8c0 .4.2.8.9.7 5.4-1.8 9.3-6.9 9.3-12.9C29.6 8.5 23.5 2.5 16 2.5z"
           />
+        </svg>
+      </span>
+    );
+  }
+
+  if (connectorId === "gitlab") {
+    return (
+      <span className="connector-logo" aria-hidden="true">
+        <svg viewBox="0 0 32 32" focusable="false">
+          <path fill="#E24329" d="M16 28.6 22 10H10z" />
+          <path fill="#FC6D26" d="M16 28.6 4.4 10h5.6zM16 28.6 27.6 10H22z" />
+          <path fill="#FCA326" d="M4.4 10 2.7 15.2c-.2.7 0 1.5.7 1.9L16 28.6zM27.6 10l1.7 5.2c.2.7 0 1.5-.7 1.9L16 28.6z" />
+          <path fill="#E24329" d="M10 10 12.4 3c.2-.7 1.2-.7 1.4 0L16 10zM22 10 19.6 3c-.2-.7-1.2-.7-1.4 0L16 10z" />
+        </svg>
+      </span>
+    );
+  }
+
+  if (connectorId === "bitbucket") {
+    return (
+      <span className="connector-logo" aria-hidden="true">
+        <svg viewBox="0 0 32 32" focusable="false">
+          <path fill="#2684FF" d="M4.4 5.6c-.5 0-.9.5-.8 1l3.3 19.9c.1.6.6 1 1.2 1h15.7c.5 0 1-.4 1.1-.9l3.5-20c.1-.6-.3-1-.8-1z" />
+          <path fill="#0052CC" d="M19.8 20.2h-7.5l-1.1-8.4h10z" />
         </svg>
       </span>
     );

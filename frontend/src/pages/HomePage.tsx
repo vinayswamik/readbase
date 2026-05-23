@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { AuthUser, Workspace } from "../types";
+import { HomeConnectorRail } from "./homepage/HomeConnectorRail";
 import { WorkspaceChatPage } from "./WorkspaceChatPage";
 import { WorkspaceDashboardPage } from "./WorkspaceDashboardPage";
 
@@ -110,11 +111,14 @@ export function HomePage({
           onSessionExpired={onSessionExpired}
         />
       ) : (
-        <WorkspaceDashboardPage
-          user={user}
-          onSelectWorkspace={setSelectedWorkspace}
-          onSessionExpired={onSessionExpired}
-        />
+        <div className="home-content-shell">
+          <WorkspaceDashboardPage
+            user={user}
+            onSelectWorkspace={setSelectedWorkspace}
+            onSessionExpired={onSessionExpired}
+          />
+          <HomeConnectorRail onSessionExpired={onSessionExpired} />
+        </div>
       )}
     </main>
   );

@@ -73,11 +73,7 @@ pip install -e .
 ## Run
 
 ```bash
-cd frontend
-npm install
-npm run build
-cd ..
-python server.py
+python3 server.py
 ```
 
 Then open `http://127.0.0.1:8000`.
@@ -141,12 +137,11 @@ python -m unittest discover -s tests
 ## Frontend
 
 The frontend is a self-contained Vite React + TypeScript app under `frontend/`.
-The Python server serves the production build from `frontend/dist`.
+The Python server builds it and serves the production files from `frontend/dist`.
 
 ```bash
 cd frontend
 npm install
-npm run build
 ```
 
 ## Optional LLM Answers

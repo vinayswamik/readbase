@@ -86,10 +86,11 @@ def slack_connection(user=Depends(require_authenticated_user)) -> dict:
 @router.delete("/me/integrations/slack", response_model=SlackConnectionResponse)
 def disconnect_slack_connection(
     team_id: str | None = Query(default=None),
+    remove_data: bool = Query(default=False),
     user=Depends(require_authenticated_user),
 ) -> dict:
     try:
-        return disconnect_slack(user.user_id, team_id=team_id)
+        return disconnect_slack(user.user_id, team_id=team_id, remove_data=remove_data)
     except ServiceError as exc:
         raise service_error_to_http(exc) from exc
 

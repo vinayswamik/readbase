@@ -10,7 +10,7 @@ from sqlalchemy import delete, select
 from src.backend.application.services.auth_service import APP_BASE_URL
 from src.backend.application.services.exceptions import PermissionDeniedError, ValidationError
 from src.backend.infrastructure.database import session_scope
-from src.backend.infrastructure.models import JiraUserConnection, JiraUserSite, JiraVisibilityCache, utc_now
+from src.backend.infrastructure.models import JiraIndexedItem, JiraUserConnection, JiraUserSite, JiraVisibilityCache, WorkspaceJiraSource, utc_now
 
 from .constants import (
     ATLASSIAN_AUTHORIZE_URL,
@@ -100,8 +100,12 @@ def get_jira_connection_status(user_id: str) -> dict:
         return public_connection(connection, [public_site(site) for site in sites])
 
 
-def disconnect_jira(user_id: str) -> dict:
+def disconnect_jira(user_id: str, remove_data: bool = False) -> dict:
     with session_scope() as session:
+        if remove_data:
+            source_ids = select(WorkspaceJiraSource.source_id).where(WorkspaceJiraSource.sync_owner_user_id == user_id)
+            session.execute(delete(JiraIndexedItem).where(JiraIndexedItem.source_id.in_(source_ids)))
+            session.execute(delete(WorkspaceJiraSource).where(WorkspaceJiraSource.sync_owner_user_id == user_id))
         connection = session.scalar(select(JiraUserConnection).where(JiraUserConnection.user_id == user_id))
         if connection is not None:
             session.delete(connection)

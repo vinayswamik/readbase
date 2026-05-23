@@ -43,6 +43,24 @@ class GitlabUserConnection(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
 
+class TeamsUserConnection(Base):
+    __tablename__ = "teams_user_connections"
+
+    connection_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    microsoft_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    tenant_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    user_principal_name: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    mail: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    access_token_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    refresh_token_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    scopes: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    connected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+
 class LinearUserConnection(Base):
     __tablename__ = "linear_user_connections"
 

@@ -13,7 +13,7 @@ from src.backend.application.services.exceptions import PermissionDeniedError, V
 from src.backend.application.services.jira.crypto import decrypt_token, encrypt_token
 from src.backend.application.services.jira.utils import as_utc
 from src.backend.infrastructure.database import session_scope
-from src.backend.infrastructure.models import ConfluenceUserConnection, ConfluenceUserSite, ConfluenceVisibilityCache, utc_now
+from src.backend.infrastructure.models import ConfluenceIndexedItem, ConfluenceUserConnection, ConfluenceUserSite, ConfluenceVisibilityCache, WorkspaceConfluenceSource, utc_now
 
 from .constants import ATLASSIAN_AUTHORIZE_URL, ATLASSIAN_ME_URL, ATLASSIAN_RESOURCES_URL, ATLASSIAN_TOKEN_URL, CONFLUENCE_CALLBACK_PATH, CONFLUENCE_OAUTH_STATE_TTL_SECONDS, CONFLUENCE_SCOPES
 from .http import confluence_client_id, confluence_client_secret, is_confluence_configured, json_request, safe_json_request
@@ -88,8 +88,12 @@ def get_confluence_connection_status(user_id: str) -> dict:
         return public_connection(connection, [public_site(site) for site in sites])
 
 
-def disconnect_confluence(user_id: str) -> dict:
+def disconnect_confluence(user_id: str, remove_data: bool = False) -> dict:
     with session_scope() as session:
+        if remove_data:
+            source_ids = select(WorkspaceConfluenceSource.source_id).where(WorkspaceConfluenceSource.sync_owner_user_id == user_id)
+            session.execute(delete(ConfluenceIndexedItem).where(ConfluenceIndexedItem.source_id.in_(source_ids)))
+            session.execute(delete(WorkspaceConfluenceSource).where(WorkspaceConfluenceSource.sync_owner_user_id == user_id))
         session.execute(delete(ConfluenceUserConnection).where(ConfluenceUserConnection.user_id == user_id))
         session.execute(delete(ConfluenceUserSite).where(ConfluenceUserSite.user_id == user_id))
         session.execute(delete(ConfluenceVisibilityCache).where(ConfluenceVisibilityCache.user_id == user_id))

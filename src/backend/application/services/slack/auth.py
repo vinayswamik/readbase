@@ -11,7 +11,7 @@ from src.backend.application.services.auth_service import APP_BASE_URL
 from src.backend.application.services.exceptions import PermissionDeniedError, ValidationError
 from src.backend.application.services.jira.crypto import decrypt_token, encrypt_token
 from src.backend.infrastructure.database import session_scope
-from src.backend.infrastructure.models import SlackUserConnection, SlackVisibilityCache, utc_now
+from src.backend.infrastructure.models import SlackIndexedItem, SlackUserConnection, SlackVisibilityCache, WorkspaceSlackSource, utc_now
 
 from .constants import SLACK_AUTHORIZE_URL, SLACK_CALLBACK_PATH, SLACK_OAUTH_STATE_TTL_SECONDS, SLACK_USER_SCOPES
 from .http import is_slack_configured, slack_api_request, slack_client_id, slack_client_secret, slack_oauth_request
@@ -110,8 +110,17 @@ def get_slack_connection_status(user_id: str) -> dict:
     return public_connection(teams)
 
 
-def disconnect_slack(user_id: str, team_id: str | None = None) -> dict:
+def disconnect_slack(user_id: str, team_id: str | None = None, remove_data: bool = False) -> dict:
     with session_scope() as session:
+        if remove_data:
+            source_statement = select(WorkspaceSlackSource.source_id).where(WorkspaceSlackSource.sync_owner_user_id == user_id)
+            delete_sources_statement = delete(WorkspaceSlackSource).where(WorkspaceSlackSource.sync_owner_user_id == user_id)
+            if team_id:
+                normalized_team_id = team_id.strip()
+                source_statement = source_statement.where(WorkspaceSlackSource.team_id == normalized_team_id)
+                delete_sources_statement = delete_sources_statement.where(WorkspaceSlackSource.team_id == normalized_team_id)
+            session.execute(delete(SlackIndexedItem).where(SlackIndexedItem.source_id.in_(source_statement)))
+            session.execute(delete_sources_statement)
         statement = delete(SlackUserConnection).where(SlackUserConnection.user_id == user_id)
         if team_id:
             statement = statement.where(SlackUserConnection.team_id == team_id.strip())

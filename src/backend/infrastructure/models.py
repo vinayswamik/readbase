@@ -392,6 +392,7 @@ from src.backend.infrastructure.connector_models import (  # noqa: E402,F401
     LinearIndexedItem,
     LinearUserConnection,
     LinearVisibilityCache,
+    TeamsUserConnection,
     WorkspaceConfluenceSource,
     WorkspaceLinearSource,
 )

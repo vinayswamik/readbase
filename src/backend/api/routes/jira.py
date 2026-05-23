@@ -77,9 +77,12 @@ def jira_connection(user=Depends(require_authenticated_user)) -> dict:
 
 
 @router.delete("/me/integrations/jira", response_model=JiraConnectionResponse)
-def disconnect_jira_connection(user=Depends(require_authenticated_user)) -> dict:
+def disconnect_jira_connection(
+    remove_data: bool = Query(default=False),
+    user=Depends(require_authenticated_user),
+) -> dict:
     try:
-        return disconnect_jira(user.user_id)
+        return disconnect_jira(user.user_id, remove_data=remove_data)
     except ServiceError as exc:
         raise service_error_to_http(exc) from exc
 
