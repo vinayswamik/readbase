@@ -1233,10 +1233,12 @@ button {
   grid-template-rows: auto minmax(0, 1fr);
   width: min(560px, 100%);
   max-height: min(720px, calc(100vh - 36px));
-  border: 1px solid var(--line);
+  border: 1px solid #d0d5dd;
   border-radius: 8px;
   background: #fff;
-  box-shadow: 0 24px 64px rgba(16, 24, 40, 0.24);
+  box-shadow:
+    0 28px 80px rgba(16, 24, 40, 0.28),
+    0 8px 24px rgba(21, 94, 239, 0.08);
   overflow: hidden;
 }
 
@@ -1246,7 +1248,7 @@ button {
   justify-content: space-between;
   gap: 14px;
   border-bottom: 1px solid var(--line);
-  background: #f8fafc;
+  background: linear-gradient(180deg, #fbfdff 0%, #f2f6fc 100%);
   padding: 16px;
 }
 
@@ -1255,37 +1257,38 @@ button {
   align-items: center;
   gap: 10px;
   min-width: 0;
+  flex: 1;
+  justify-content: center;
+  padding-left: 34px;
 }
 
 .connector-modal-title h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: 22px;
+  font-weight: 900;
   line-height: 1.2;
-}
-
-.connector-modal-title p {
-  margin: 3px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
+  color: #101828;
 }
 
 .connector-close-button {
   flex: 0 0 auto;
   width: 34px;
   height: 34px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fff;
+  border: 1px solid #d0d5dd;
+  border-radius: 999px;
+  background: #ffffff;
   color: var(--muted);
   cursor: pointer;
   font-size: 16px;
   font-weight: 900;
+  box-shadow: 0 3px 8px rgba(16, 24, 40, 0.08);
 }
 
 .connector-close-button:hover {
   color: var(--ink);
-  background: #f2f4f7;
+  background: #f8fafc;
+  border-color: #98a2b3;
+  box-shadow: 0 6px 14px rgba(16, 24, 40, 0.12);
 }
 
 .connector-modal-body {
@@ -1326,6 +1329,21 @@ button {
   display: block;
 }
 
+.connector-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.connector-account-actions .primary-button,
+.connector-account-actions .secondary-action-button {
+  min-height: 38px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
 .connector-account-row span {
   color: var(--muted);
   font-size: 12px;
@@ -1333,6 +1351,11 @@ button {
   margin-top: 3px;
 }
 
+.connector-search-row.slack-channel-search-row {
+  grid-template-columns: minmax(120px, 0.75fr) minmax(0, 1fr) auto;
+}
+
+.connector-search-row select,
 .connector-search-row input {
   width: 100%;
   min-height: 38px;
@@ -1348,11 +1371,14 @@ button {
   display: grid;
   gap: 8px;
   min-width: 0;
-  border: 1px solid var(--line);
+  border: 1px solid #d8dee8;
   border-radius: 8px;
-  background: #f8fafc;
+  background: linear-gradient(180deg, #fbfdff 0%, #f7f9fc 100%);
   margin: 0;
   padding: 12px;
+  box-shadow:
+    0 10px 24px rgba(16, 24, 40, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
 .connector-access-list h3 {
@@ -1363,16 +1389,139 @@ button {
   text-transform: uppercase;
 }
 
+.connector-section-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.connector-section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  min-width: 0;
+  min-height: 34px;
+  border: 0;
+  background: transparent;
+  color: #344054;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 0;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.connector-section-toggle span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connector-section-chevron {
+  color: #155eef;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  transition: transform 140ms ease;
+}
+
+.connector-section-chevron.open {
+  transform: rotate(180deg);
+}
+
+.connector-section-chevron svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.connector-section-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.connector-section-search {
+  width: min(360px, 100%);
+  min-height: 38px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  outline: none;
+  padding: 0 10px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+}
+
+.connector-section-search:focus {
+  border-color: #155eef;
+  box-shadow:
+    0 0 0 4px rgba(21, 94, 239, 0.12),
+    0 1px 2px rgba(16, 24, 40, 0.05);
+}
+
+.connector-section-scroll {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  max-height: 168px;
+  overflow-y: auto;
+}
+
+.connector-section-scroll-tall {
+  max-height: 260px;
+}
+
+.connector-section-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 200ms ease,
+    opacity 180ms ease;
+}
+
+.connector-section-collapse > * {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.connector-section-collapse.open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.connector-result-divider {
+  height: 1px;
+  background: #e4e7ec;
+  margin: 2px 0;
+}
+
 .connector-access-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 9px;
   min-height: 36px;
-  border: 1px solid #eaecf0;
+  border: 1px solid #e4e7ec;
   border-radius: 8px;
   background: #fff;
   padding: 7px 9px;
+  box-shadow: 0 2px 5px rgba(16, 24, 40, 0.04);
+}
+
+.connector-access-row.slack-workspace-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.connector-access-row.slack-channel-row {
+  grid-template-columns: minmax(0, 1fr) minmax(110px, auto) auto;
 }
 
 .compact-button {
@@ -1390,14 +1539,20 @@ button {
   min-width: 0;
   color: var(--ink);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 400;
   overflow-wrap: anywhere;
 }
 
 .connector-access-row strong {
   color: var(--muted);
-  font-size: 11px;
-  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 400;
+  text-transform: none;
+}
+
+.connector-access-row .compact-button {
+  font-size: 13px;
+  font-weight: 400;
 }
 
 .connector-modal-actions {
@@ -1958,8 +2113,17 @@ button {
   }
 
   .connection-row,
+  .connector-account-row,
+  .connector-search-row,
+  .connector-search-row.slack-channel-search-row,
+  .connector-section-row,
+  .connector-access-row.slack-channel-row,
   .overlay-ask-form {
     grid-template-columns: 1fr;
+  }
+
+  .connector-section-search {
+    width: 100%;
   }
 
   .connector-modal-actions {

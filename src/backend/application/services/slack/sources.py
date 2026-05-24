@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from src.backend.application.services.exceptions import PermissionDeniedError, ResourceNotFoundError, ValidationError
-from src.backend.application.services.workspace_service import user_can_access_workspace, user_can_manage_workspace_connectors
+from src.backend.application.services.workspace_service import user_can_access_workspace
 from src.backend.infrastructure.database import session_scope
 from src.backend.infrastructure.models import SlackUserConnection, Workspace, WorkspaceSlackSource, utc_now
 
@@ -63,7 +63,7 @@ def list_workspace_slack_sources(workspace_id: str, user_id: str) -> list[dict]:
 
 
 def add_workspace_slack_source(workspace_id: str, actor_user_id: str, actor_email: str, payload: dict) -> dict:
-    require_connector_manager(actor_user_id, actor_email, workspace_id)
+    require_workspace_access(actor_user_id, actor_email, workspace_id)
     team_id = required_payload(payload, "team_id")
     channel_id = required_payload(payload, "channel_id")
     channel_name = required_payload(payload, "channel_name")
@@ -105,11 +105,13 @@ def add_workspace_slack_source(workspace_id: str, actor_user_id: str, actor_emai
 
 
 def remove_workspace_slack_source(workspace_id: str, source_id: str, actor_user_id: str, actor_email: str) -> dict:
-    require_connector_manager(actor_user_id, actor_email, workspace_id)
+    require_workspace_access(actor_user_id, actor_email, workspace_id)
     with session_scope() as session:
         source = session.get(WorkspaceSlackSource, source_id.strip())
         if source is None or source.workspace_id != workspace_id.strip():
             raise ResourceNotFoundError("Slack source not found.")
+        access_token = get_valid_slack_access_token(actor_user_id, source.team_id)
+        verify_slack_channel_access(access_token, source.channel_id)
         public = public_source(source, user_access="unknown")
         session.delete(source)
         return public
@@ -128,8 +130,6 @@ def get_user_team(user_id: str, team_id: str) -> dict:
         return public_team(connection)
 
 
-def require_connector_manager(user_id: str, user_email: str, workspace_id: str) -> None:
+def require_workspace_access(user_id: str, user_email: str, workspace_id: str) -> None:
     if not user_can_access_workspace(user_id, user_email, workspace_id):
         raise PermissionDeniedError("Workspace access required.")
-    if not user_can_manage_workspace_connectors(user_id, user_email, workspace_id):
-        raise PermissionDeniedError("Connector manager access required.")

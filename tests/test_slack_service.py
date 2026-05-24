@@ -23,7 +23,7 @@ class SlackServiceTests(unittest.TestCase):
         database.configure_database(self.original_url)
         self.temp_dir.cleanup()
 
-    def test_add_slack_source_requires_connector_manager(self):
+    def test_add_slack_source_requires_workspace_access_and_slack_channel_access(self):
         workspace = workspace_service.create_workspace("admin-1", "Demo", owner_email="admin@example.com")
         workspace_service.add_workspace_member("admin-1", workspace["workspace_id"], "member@example.com")
         self._connect_slack_user("member-1")
@@ -31,17 +31,11 @@ class SlackServiceTests(unittest.TestCase):
         with self.assertRaises(Exception):
             slack_service.add_workspace_slack_source(
                 workspace["workspace_id"],
-                "member-1",
-                "member@example.com",
+                "other-1",
+                "other@example.com",
                 self._channel_payload(),
             )
 
-        workspace_service.update_workspace_member_connector_manager(
-            "admin-1",
-            workspace["workspace_id"],
-            "member@example.com",
-            True,
-        )
         with patch("src.backend.application.services.slack.sources.verify_slack_channel_access", return_value=True):
             source = slack_service.add_workspace_slack_source(
                 workspace["workspace_id"],

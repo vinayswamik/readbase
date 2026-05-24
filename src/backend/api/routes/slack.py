@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import urllib.parse
+
 from fastapi import APIRouter, Cookie, Depends, Query
 from fastapi.responses import RedirectResponse
 
@@ -27,14 +29,18 @@ from src.backend.application.services.slack_service import (
     remove_workspace_slack_source,
     sync_workspace_slack_source,
 )
-from src.backend.application.services.workspace_service import user_can_manage_workspace_connectors
+from src.backend.application.services.workspace_service import user_can_access_workspace, user_can_manage_workspace_connectors
 
 router = APIRouter(tags=["slack"])
 SLACK_STATE_COOKIE_NAME = "readbase_slack_oauth_state"
+SLACK_RETURN_WORKSPACE_COOKIE_NAME = "readbase_slack_return_workspace"
 
 
 @router.get("/me/integrations/slack/start")
-def start_slack_connection(_user=Depends(require_authenticated_user)) -> RedirectResponse:
+def start_slack_connection(
+    workspace_id: str | None = Query(default=None),
+    user=Depends(require_authenticated_user),
+) -> RedirectResponse:
     state = create_slack_oauth_state()
     try:
         authorize_url = build_slack_authorize_url(state)
@@ -50,6 +56,17 @@ def start_slack_connection(_user=Depends(require_authenticated_user)) -> Redirec
         secure=SESSION_SECURE_COOKIE,
         path="/",
     )
+    normalized_workspace_id = workspace_id.strip() if workspace_id else ""
+    if normalized_workspace_id and user_can_access_workspace(user.user_id, user.email, normalized_workspace_id):
+        redirect.set_cookie(
+            key=SLACK_RETURN_WORKSPACE_COOKIE_NAME,
+            value=normalized_workspace_id,
+            max_age=SLACK_OAUTH_STATE_TTL_SECONDS,
+            httponly=True,
+            samesite="lax",
+            secure=SESSION_SECURE_COOKIE,
+            path="/",
+        )
     return redirect
 
 
@@ -58,21 +75,36 @@ def complete_slack_connection(
     code: str | None = Query(default=None),
     state: str | None = Query(default=None),
     slack_state_cookie: str | None = Cookie(default=None, alias=SLACK_STATE_COOKIE_NAME),
+    slack_return_workspace_cookie: str | None = Cookie(default=None, alias=SLACK_RETURN_WORKSPACE_COOKIE_NAME),
     user=Depends(require_authenticated_user),
 ) -> RedirectResponse:
-    redirect = RedirectResponse(url="/?slack_connected=1", status_code=303)
+    return_workspace_id = slack_return_workspace_cookie.strip() if slack_return_workspace_cookie else ""
+    redirect = slack_oauth_redirect("slack_connected", "1", return_workspace_id)
     redirect.delete_cookie(key=SLACK_STATE_COOKIE_NAME, path="/")
+    redirect.delete_cookie(key=SLACK_RETURN_WORKSPACE_COOKIE_NAME, path="/")
     if not code or not state or not slack_state_cookie or state != slack_state_cookie:
-        redirect = RedirectResponse(url="/?slack_error=invalid_state", status_code=303)
+        redirect = slack_oauth_redirect("slack_error", "invalid_state", return_workspace_id)
         redirect.delete_cookie(key=SLACK_STATE_COOKIE_NAME, path="/")
+        redirect.delete_cookie(key=SLACK_RETURN_WORKSPACE_COOKIE_NAME, path="/")
         return redirect
     try:
         exchange_slack_code_for_connection(user.user_id, code)
     except ServiceError:
-        redirect = RedirectResponse(url="/?slack_error=connect_failed", status_code=303)
+        redirect = slack_oauth_redirect("slack_error", "connect_failed", return_workspace_id)
         redirect.delete_cookie(key=SLACK_STATE_COOKIE_NAME, path="/")
+        redirect.delete_cookie(key=SLACK_RETURN_WORKSPACE_COOKIE_NAME, path="/")
         return redirect
     return redirect
+
+
+def slack_oauth_redirect(status_key: str, status_value: str, workspace_id: str = "") -> RedirectResponse:
+    params = {
+        status_key: status_value,
+        "connector": "slack",
+    }
+    if workspace_id:
+        params["workspace_id"] = workspace_id
+    return RedirectResponse(url=f"/?{urllib.parse.urlencode(params)}", status_code=303)
 
 
 @router.get("/me/integrations/slack", response_model=SlackConnectionResponse)
