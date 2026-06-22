@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "dev:ui": "node scripts/dev-ui.mjs",
+    "mock:server": "node mock/server.mjs",
+    "generate:api-types": "cd .. && python3 scripts/generate_api_types.py",
     "build": "tsc -p tsconfig.json && vite build",
     "check": "tsc -p tsconfig.json --noEmit",
     "preview": "vite preview --host 127.0.0.1"

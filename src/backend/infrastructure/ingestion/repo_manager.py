@@ -1,48 +1,33 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import shutil
 import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
 
-from src.backend.config.settings import CHROMA_DIR, DATA_DIR, INDEX_DIR, REPOS_DIR, WORKSPACES_DIR
+from src.backend.config.settings import DATA_DIR
 from src.backend.infrastructure.ingestion.chunker import chunk_repository
-from src.backend.infrastructure.retrieval.retriever import (
-    build_index,
-    delete_index,
-    save_index,
-)
+from src.backend.infrastructure.retrieval.retriever import build_index, delete_index, save_index
+from src.backend.infrastructure.storage.context import StorageContext
+from src.backend.infrastructure.storage.resolver import resolve_storage
 
 
-# Domain-specific exception: server.py catches this and returns a clean 400 JSON error.
 class RepoError(RuntimeError):
     pass
 
 
-# Ensure the local data folders exist before cloning or writing indexes.
 def ensure_data_dirs() -> None:
     DATA_DIR.mkdir(exist_ok=True)
-    REPOS_DIR.mkdir(parents=True, exist_ok=True)
-    INDEX_DIR.mkdir(parents=True, exist_ok=True)
-    CHROMA_DIR.mkdir(parents=True, exist_ok=True)
-    WORKSPACES_DIR.mkdir(parents=True, exist_ok=True)
+    resolve_storage(None).ensure_dirs()
 
 
-def storage_dirs(workspace_id: str | None = None) -> tuple[Path, Path]:
-    if not workspace_id:
-        return REPOS_DIR, INDEX_DIR
-    workspace_root = WORKSPACES_DIR / workspace_id
-    repos_dir = workspace_root / "repos"
-    indexes_dir = workspace_root / "indexes"
-    repos_dir.mkdir(parents=True, exist_ok=True)
-    indexes_dir.mkdir(parents=True, exist_ok=True)
-    return repos_dir, indexes_dir
+def storage_context(workspace_id: str | None = None) -> StorageContext:
+    return resolve_storage(workspace_id)
 
 
-# Turn a hosted Git URL into a safe local folder/index name. The short hash avoids
-# collisions when similar repo paths or URL forms point to different sources.
 def repo_id_from_url(repo_url: str) -> str:
     parsed = urlparse(repo_url.strip())
     if parsed.scheme not in {"http", "https", "git", "ssh"}:
@@ -59,7 +44,6 @@ def repo_id_from_url(repo_url: str) -> str:
     return f"{slug}-{digest}" if slug else digest
 
 
-# Local paths get their own stable id so the same folder maps to the same index.
 def repo_id_from_local_path(repo_path: Path) -> str:
     resolved = repo_path.resolve()
     slug = re.sub(r"[^A-Za-z0-9_.-]+", "-", resolved.name).strip("-") or "local-repo"
@@ -67,8 +51,6 @@ def repo_id_from_local_path(repo_path: Path) -> str:
     return f"{slug}-{digest}"
 
 
-# High-level ingestion pipeline: validate URL, clone if needed, chunk files,
-# build the retrieval index, save it, then return stats to the UI.
 def index_repo(
     repo_url: str,
     refresh: bool = False,
@@ -77,12 +59,11 @@ def index_repo(
     auth_token: str | None = None,
 ) -> dict:
     ensure_data_dirs()
-    repos_dir, indexes_dir = storage_dirs(workspace_id)
+    storage = storage_context(workspace_id)
     repo_id = repo_id_from_url(repo_url)
-    repo_path = repos_dir / repo_id
-    index_path = indexes_dir / f"{repo_id}.json"
+    repo_path = storage.repos_dir / repo_id
+    index_path = storage.indexes_dir / f"{repo_id}.json"
 
-    # Refresh means "start over" for this repo, useful after upstream changes.
     if refresh and repo_path.exists():
         shutil.rmtree(repo_path)
     if refresh and index_path.exists():
@@ -90,7 +71,6 @@ def index_repo(
     if refresh:
         delete_index(repo_id, workspace_id=workspace_id)
 
-    # Reuse an existing clone unless refresh was requested.
     if not repo_path.exists():
         clone_repo(repo_url, repo_path, auth_token=auth_token or github_token)
 
@@ -114,20 +94,19 @@ def index_repo(
     }
 
 
-# Index an already-downloaded local repository path (no cloning).
 def index_local_repo(
     local_repo_path: str,
     refresh: bool = False,
     workspace_id: str | None = None,
 ) -> dict:
     ensure_data_dirs()
-    _repos_dir, indexes_dir = storage_dirs(workspace_id)
+    storage = storage_context(workspace_id)
     repo_path = Path(local_repo_path).expanduser().resolve()
     if not repo_path.exists() or not repo_path.is_dir():
         raise RepoError("Local repository path does not exist or is not a directory.")
 
     repo_id = repo_id_from_local_path(repo_path)
-    index_path = indexes_dir / f"{repo_id}.json"
+    index_path = storage.indexes_dir / f"{repo_id}.json"
 
     if refresh and index_path.exists():
         index_path.unlink()
@@ -155,8 +134,6 @@ def index_local_repo(
     }
 
 
-# Shell out to git instead of implementing provider download logic ourselves.
-# `--depth 1` keeps the first version fast by skipping full commit history.
 def clone_repo(repo_url: str, repo_path: Path, github_token: str | None = None, auth_token: str | None = None) -> None:
     token = auth_token or github_token
     command = ["git", "clone", "--depth", "1", repo_url, str(repo_path)]
@@ -192,26 +169,27 @@ def clone_repo(repo_url: str, repo_path: Path, github_token: str | None = None, 
         raise RepoError(message)
 
 
-# Read the saved JSON index files and return lightweight repo cards for the sidebar.
 def list_indexes(workspace_id: str | None = None) -> list[dict]:
     ensure_data_dirs()
-    _repos_dir, indexes_dir = storage_dirs(workspace_id)
+    storage = storage_context(workspace_id)
     repos = []
-    for path in sorted(indexes_dir.glob("*.json")):
-        try:
-            # Imported here because only this small listing path needs JSON parsing.
-            import json
-
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        repos.append(
-            {
-                "repo_id": data.get("repo_id"),
-                "workspace_id": data.get("workspace_id"),
-                "repo_url": data.get("repo_url"),
-                "file_count": data.get("file_count", 0),
-                "chunk_count": data.get("chunk_count", 0),
-            }
-        )
+    seen: set[str] = set()
+    for indexes_dir in storage.index_search_dirs():
+        for path in sorted(indexes_dir.glob("*.json")):
+            if path.name in seen:
+                continue
+            seen.add(path.name)
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            repos.append(
+                {
+                    "repo_id": data.get("repo_id"),
+                    "workspace_id": data.get("workspace_id"),
+                    "repo_url": data.get("repo_url"),
+                    "file_count": data.get("file_count", 0),
+                    "chunk_count": data.get("chunk_count", 0),
+                }
+            )
     return repos

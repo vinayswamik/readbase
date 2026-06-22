@@ -7,24 +7,30 @@ from src.backend.api.auth import require_authenticated_user, require_workspace_a
 from src.backend.api.errors import service_error_to_http
 from src.backend.api.schemas import (
     AddWorkspaceJiraProjectRequest,
+    ConnectWorkspaceJiraSiteRequest,
     JiraConnectionResponse,
     JiraProjectsResponse,
+    WorkspaceJiraSiteStatusResponse,
     WorkspaceJiraSourceResponse,
     WorkspaceJiraSourcesResponse,
 )
 from src.backend.application.services.auth_service import SESSION_SECURE_COOKIE
+from src.backend.application.services.connectors.oauth_core import oauth_states_match
 from src.backend.application.services.exceptions import ServiceError
 from src.backend.application.services.exceptions import PermissionDeniedError
 from src.backend.application.services.jira_service import (
     JIRA_OAUTH_STATE_TTL_SECONDS,
     add_workspace_jira_source,
     build_jira_authorize_url,
+    connect_workspace_jira_site,
     create_jira_oauth_state,
     disconnect_jira,
     exchange_jira_code_for_connection,
     get_jira_connection_status,
+    get_workspace_jira_site,
     list_visible_jira_projects,
     list_workspace_jira_sources,
+    remove_workspace_jira_site,
     remove_workspace_jira_source,
     sync_workspace_jira_source,
 )
@@ -59,7 +65,7 @@ def complete_jira_connection(
 ) -> RedirectResponse:
     redirect = RedirectResponse(url="/?jira_connected=1", status_code=303)
     redirect.delete_cookie(key=JIRA_STATE_COOKIE_NAME, path="/")
-    if not code or not state or not jira_state_cookie or state != jira_state_cookie:
+    if not code or not oauth_states_match(state, jira_state_cookie):
         return RedirectResponse(url="/?jira_error=invalid_state", status_code=303)
     try:
         exchange_jira_code_for_connection(user.user_id, code)
@@ -87,6 +93,43 @@ def disconnect_jira_connection(
         raise service_error_to_http(exc) from exc
 
 
+@router.get("/workspaces/{workspace_id}/jira/site", response_model=WorkspaceJiraSiteStatusResponse)
+def workspace_jira_site(
+    workspace_id: str,
+    _user=Depends(require_authenticated_user),
+    _workspace=Depends(require_workspace_access),
+) -> dict:
+    try:
+        return get_workspace_jira_site(workspace_id)
+    except ServiceError as exc:
+        raise service_error_to_http(exc) from exc
+
+
+@router.post("/workspaces/{workspace_id}/jira/site", response_model=WorkspaceJiraSiteStatusResponse)
+def connect_jira_site(
+    workspace_id: str,
+    payload: ConnectWorkspaceJiraSiteRequest,
+    user=Depends(require_authenticated_user),
+    _workspace=Depends(require_workspace_access),
+) -> dict:
+    try:
+        return connect_workspace_jira_site(workspace_id, user.user_id, user.email, payload.cloud_id)
+    except ServiceError as exc:
+        raise service_error_to_http(exc) from exc
+
+
+@router.delete("/workspaces/{workspace_id}/jira/site", response_model=WorkspaceJiraSiteStatusResponse)
+def disconnect_jira_site(
+    workspace_id: str,
+    user=Depends(require_authenticated_user),
+    _workspace=Depends(require_workspace_access),
+) -> dict:
+    try:
+        return remove_workspace_jira_site(workspace_id, user.user_id, user.email)
+    except ServiceError as exc:
+        raise service_error_to_http(exc) from exc
+
+
 @router.get("/workspaces/{workspace_id}/jira/projects", response_model=JiraProjectsResponse)
 def jira_projects(
     workspace_id: str,
@@ -95,7 +138,11 @@ def jira_projects(
     _workspace=Depends(require_workspace_access),
 ) -> dict:
     try:
-        return {"projects": list_visible_jira_projects(user.user_id, query=query)}
+        site_status = get_workspace_jira_site(workspace_id)
+        if not site_status.get("connected") or not site_status.get("site"):
+            return {"projects": []}
+        cloud_id = str(site_status["site"]["cloud_id"])
+        return {"projects": list_visible_jira_projects(user.user_id, query=query, cloud_id=cloud_id)}
     except ServiceError as exc:
         raise service_error_to_http(exc) from exc
 

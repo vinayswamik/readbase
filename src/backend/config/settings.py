@@ -38,7 +38,13 @@ WORKSPACES_DIR = DATA_DIR / "workspaces"
 WORKSPACES_MANIFEST = DATA_DIR / "workspaces.json"
 CLI_STATE_FILE = DATA_DIR / "cli-state.json"
 DATABASE_URL = os.getenv("DATABASE_URL") or f"sqlite:///{DATA_DIR / 'readbase.db'}"
-READBASE_BOOTSTRAP_ADMIN_EMAILS = os.getenv("READBASE_BOOTSTRAP_ADMIN_EMAILS", "")
+
+# Storage routing: saas (default) or customer-owned storage root.
+# READBASE_ORG_STORAGE_ROOT is required when READBASE_DEPLOYMENT_MODE=customer.
+# READBASE_SCRATCH_DIR defaults to /tmp/readbase-scratch for ephemeral git work.
+READBASE_DEPLOYMENT_MODE = os.getenv("READBASE_DEPLOYMENT_MODE", "saas").strip().lower()
+READBASE_ORG_STORAGE_ROOT = os.getenv("READBASE_ORG_STORAGE_ROOT", "").strip()
+READBASE_SCRATCH_DIR = os.getenv("READBASE_SCRATCH_DIR", "").strip()
 
 # Chunking controls. A "chunk" is the small code/documentation slice we send
 # into retrieval and optionally to Claude. Overlap keeps context across chunk

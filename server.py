@@ -12,7 +12,10 @@ from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from src.backend.api.routes import api_router
+from src.backend.api.security_middleware import SecurityMiddleware
+from src.backend.application.services.auth.config import validate_auth_secrets
 from src.backend.application.services.confluence_service import start_confluence_sync_scheduler
+from src.backend.application.services.notion_service import start_notion_sync_scheduler
 from src.backend.application.services.jira_service import start_jira_sync_scheduler
 from src.backend.application.services.linear_service import start_linear_sync_scheduler
 from src.backend.application.services.slack_service import start_slack_sync_scheduler
@@ -28,12 +31,15 @@ FRONTEND_DIST_DIR = FRONTEND_DIR / "dist"
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Readbase", version="0.2.0")
+    validate_auth_secrets()
     init_database()
+    app.add_middleware(SecurityMiddleware)
     app.include_router(api_router)
     start_jira_sync_scheduler()
     start_slack_sync_scheduler()
     start_linear_sync_scheduler()
     start_confluence_sync_scheduler()
+    start_notion_sync_scheduler()
     app.get("/", response_model=None)(frontend_root)
     app.mount(
         "/assets",
@@ -125,8 +131,22 @@ def build_frontend() -> None:
 def main() -> None:
     build_frontend()
     release_port(PORT)
-    print(f"Readbase running at http://{HOST}:{PORT}")
-    uvicorn.run(app, host=HOST, port=PORT)
+    ssl_certfile = os.getenv("READBASE_SSL_CERTFILE", "").strip()
+    ssl_keyfile = os.getenv("READBASE_SSL_KEYFILE", "").strip()
+    uvicorn_kwargs: dict = {"host": HOST, "port": PORT}
+    if ssl_certfile and ssl_keyfile:
+        cert_path = Path(ssl_certfile)
+        key_path = Path(ssl_keyfile)
+        if not cert_path.is_absolute():
+            cert_path = PROJECT_ROOT / cert_path
+        if not key_path.is_absolute():
+            key_path = PROJECT_ROOT / key_path
+        uvicorn_kwargs["ssl_certfile"] = str(cert_path)
+        uvicorn_kwargs["ssl_keyfile"] = str(key_path)
+        print(f"Readbase running at https://{HOST}:{PORT}")
+    else:
+        print(f"Readbase running at http://{HOST}:{PORT}")
+    uvicorn.run(app, **uvicorn_kwargs)
 
 
 if __name__ == "__main__":

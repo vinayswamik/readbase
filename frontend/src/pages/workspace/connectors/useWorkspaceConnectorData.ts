@@ -6,6 +6,8 @@ import type {
   BitbucketRepositoriesResponse,
   ConfluenceConnection,
   ConfluenceSpacesResponse,
+  NotionConnection,
+  NotionDatabasesResponse,
   GitlabConnection,
   GitlabProjectsResponse,
   GithubConnection,
@@ -19,20 +21,23 @@ import type {
   SlackConnection,
   Workspace,
   WorkspaceConfluenceSourcesResponse,
+  WorkspaceNotionSourcesResponse,
   WorkspaceJiraSourcesResponse,
+  WorkspaceJiraSiteStatus,
   WorkspaceLinearSourcesResponse,
-  WorkspaceMembersResponse,
   WorkspaceSlackSourcesResponse,
-  WorkspaceJiraSource,
+  WorkspaceSlackTeam,
+  WorkspaceSlackTeamsResponse,
   WorkspaceLinearSource,
   WorkspaceConfluenceSource,
-  WorkspaceMember,
+  WorkspaceNotionSource,
   WorkspaceSlackSource,
   BitbucketRepository,
   GithubRepository,
   GitlabProject,
   JiraProject,
   ConfluenceSpace,
+  NotionDatabase,
   LinearSelectableSource,
 } from "../../../types";
 import type { ConnectorConfig } from "./connectors";
@@ -54,20 +59,6 @@ export function useWorkspaceConnectorLoaders({
   handleApiError,
   state,
 }: WorkspaceConnectorLoadersArgs) {
-  const loadConnectorMembers = useCallback(async () => {
-    state.setConnectorMembersLoading(true);
-    state.setConnectorError(null);
-    try {
-      const result = await fetchJson<WorkspaceMembersResponse>(
-        `/api/workspaces/${workspace.workspace_id}/members`,
-      );
-      state.setConnectorMembers(result.members || []);
-    } catch (error) {
-      handleApiError(error, state.setConnectorError);
-    } finally {
-      state.setConnectorMembersLoading(false);
-    }
-  }, [handleApiError, workspace.workspace_id]);
   const loadGithubConnection = useCallback(async () => {
     try {
       const result = await fetchJson<GithubConnection>(
@@ -175,6 +166,19 @@ export function useWorkspaceConnectorLoaders({
       handleApiError(error, state.setConnectorError);
     }
   }, [handleApiError, workspace.workspace_id]);
+  const loadJiraWorkspaceSite = useCallback(async () => {
+    try {
+      const result = await fetchJson<WorkspaceJiraSiteStatus>(
+        `/api/workspaces/${workspace.workspace_id}/jira/site`,
+      );
+      state.setJiraWorkspaceSite(result);
+      if (!result.connected) {
+        state.setJiraProjects([]);
+      }
+    } catch (error) {
+      handleApiError(error, state.setConnectorError);
+    }
+  }, [handleApiError, workspace.workspace_id]);
   const loadJiraProjects = useCallback(
     async (query = "") => {
       state.setJiraLoading(true);
@@ -214,44 +218,33 @@ export function useWorkspaceConnectorLoaders({
       handleApiError(error, state.setConnectorError);
     }
   }, [handleApiError, workspace.workspace_id]);
-  const loadSlackChannels = useCallback(
-    async (query = "", teams = state.slackConnection?.teams || []) => {
-      const normalizedQuery = query.trim();
-      if (!normalizedQuery || !teams.length) {
-        state.setSlackChannels([]);
-        return;
-      }
-      state.setSlackLoading(true);
-      try {
-        const results = await Promise.all(
-          teams.map((team) => {
-            const params = new URLSearchParams({
-              team_id: team.team_id,
-              query: normalizedQuery,
-            });
-            return fetchJson<SlackChannelsResponse>(
-              `/api/me/integrations/slack/channels?${params.toString()}`,
-            );
-          }),
-        );
-        const channelsByKey = new Map<string, SlackChannel>();
-        for (const result of results) {
-          for (const channel of result.channels || []) {
-            channelsByKey.set(
-              `${channel.team_id}:${channel.channel_id}`,
-              channel,
-            );
-          }
-        }
-        state.setSlackChannels(Array.from(channelsByKey.values()));
-      } catch (error) {
-        handleApiError(error, state.setConnectorError);
-      } finally {
-        state.setSlackLoading(false);
-      }
-    },
-    [handleApiError, state.slackConnection?.teams],
-  );
+  const loadSlackTeams = useCallback(async () => {
+    try {
+      const result = await fetchJson<WorkspaceSlackTeamsResponse>(
+        `/api/workspaces/${workspace.workspace_id}/slack/teams`,
+      );
+      state.setSlackTeams(result.teams || []);
+    } catch (error) {
+      handleApiError(error, state.setConnectorError);
+    }
+  }, [handleApiError, workspace.workspace_id]);
+  const loadSlackChannels = useCallback(async () => {
+    if (!state.slackTeams.length) {
+      state.setSlackChannels([]);
+      return;
+    }
+    state.setSlackLoading(true);
+    try {
+      const result = await fetchJson<SlackChannelsResponse>(
+        `/api/workspaces/${workspace.workspace_id}/slack/channels`,
+      );
+      state.setSlackChannels(result.channels || []);
+    } catch (error) {
+      handleApiError(error, state.setConnectorError);
+    } finally {
+      state.setSlackLoading(false);
+    }
+  }, [handleApiError, state.slackTeams.length, workspace.workspace_id]);
   const loadLinearConnection = useCallback(async () => {
     try {
       const result = await fetchJson<LinearConnection>(
@@ -330,10 +323,48 @@ export function useWorkspaceConnectorLoaders({
     },
     [handleApiError],
   );
+  const loadNotionConnection = useCallback(async () => {
+    try {
+      const result = await fetchJson<NotionConnection>(
+        "/api/me/integrations/notion",
+      );
+      state.setNotionConnection(result);
+    } catch (error) {
+      handleApiError(error, state.setConnectorError);
+    }
+  }, [handleApiError]);
+  const loadNotionSources = useCallback(async () => {
+    try {
+      const result = await fetchJson<WorkspaceNotionSourcesResponse>(
+        `/api/workspaces/${workspace.workspace_id}/notion/sources`,
+      );
+      state.setNotionSources(result.sources || []);
+    } catch (error) {
+      handleApiError(error, state.setConnectorError);
+    }
+  }, [handleApiError, workspace.workspace_id]);
+  const loadNotionDatabases = useCallback(
+    async (query = "") => {
+      state.setNotionLoading(true);
+      try {
+        const params = query.trim()
+          ? `?query=${encodeURIComponent(query.trim())}`
+          : "";
+        const result = await fetchJson<NotionDatabasesResponse>(
+          `/api/me/integrations/notion/databases${params}`,
+        );
+        state.setNotionDatabases(result.databases || []);
+      } catch (error) {
+        handleApiError(error, state.setConnectorError);
+      } finally {
+        state.setNotionLoading(false);
+      }
+    },
+    [handleApiError],
+  );
 
 
   return {
-    loadConnectorMembers,
     loadGithubConnection,
     loadGithubRepositories,
     loadBitbucketConnection,
@@ -342,9 +373,11 @@ export function useWorkspaceConnectorLoaders({
     loadGitlabProjects,
     loadJiraConnection,
     loadJiraSources,
+    loadJiraWorkspaceSite,
     loadJiraProjects,
     loadSlackConnection,
     loadSlackSources,
+    loadSlackTeams,
     loadSlackChannels,
     loadLinearConnection,
     loadLinearSources,
@@ -352,5 +385,8 @@ export function useWorkspaceConnectorLoaders({
     loadConfluenceConnection,
     loadConfluenceSources,
     loadConfluenceSpaces,
+    loadNotionConnection,
+    loadNotionSources,
+    loadNotionDatabases,
   };
 }

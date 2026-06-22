@@ -1,6 +1,7 @@
 import { FormEvent } from "react";
 
 import { deleteJson, postJson } from "../../../api";
+import { startOAuthFlow } from "../../../mock/dev";
 import type {
   BitbucketConnection,
   GitlabConnection,
@@ -42,12 +43,15 @@ function connectorHandlerBindings(loads: ConnectorLoads) {
     setConfluenceConnection: loads.setConfluenceConnection,
     setConfluenceSpaces: loads.setConfluenceSpaces,
     setConfluenceLoading: loads.setConfluenceLoading,
-    setConnectorMembers: loads.setConnectorMembers,
+    setNotionConnection: loads.setNotionConnection,
+    setNotionDatabases: loads.setNotionDatabases,
+    setNotionLoading: loads.setNotionLoading,
     setConnectorRepoUrl: loads.setConnectorRepoUrl,
     loadJiraSources: loads.loadJiraSources,
     loadSlackSources: loads.loadSlackSources,
     loadLinearSources: loads.loadLinearSources,
     loadConfluenceSources: loads.loadConfluenceSources,
+    loadNotionSources: loads.loadNotionSources,
   };
 }
 
@@ -59,6 +63,7 @@ type UseWorkspaceConnectorHandlersArgs = {
   loads: ConnectorLoads;
   setRepoId: (repoId: string) => void;
   loadRepos: (preferredRepoId?: string) => Promise<void>;
+  onWorkspaceSourcesChanged?: () => void;
 };
 
 export function useWorkspaceConnectorHandlers({
@@ -69,6 +74,7 @@ export function useWorkspaceConnectorHandlers({
   loads,
   setRepoId,
   loadRepos,
+  onWorkspaceSourcesChanged,
 }: UseWorkspaceConnectorHandlersArgs) {
   const {
     setActiveConnectorId,
@@ -92,7 +98,12 @@ export function useWorkspaceConnectorHandlers({
     workspace,
     handleApiError,
     loads,
+    onWorkspaceSourcesChanged,
   });
+
+  function notifyWorkspaceSourcesChanged() {
+    onWorkspaceSourcesChanged?.();
+  }
 
   function openConnectorModal(connectorId: ConnectorId) {
     setActiveConnectorId(connectorId);
@@ -136,6 +147,7 @@ export function useWorkspaceConnectorHandlers({
         `Repository indexed. Answers will use it only for users with ${providerName} access.`,
       );
       await loadRepos(result.repo_id);
+      notifyWorkspaceSourcesChanged();
     } catch (error) {
       handleApiError(error, setConnectorError);
     } finally {
@@ -144,11 +156,11 @@ export function useWorkspaceConnectorHandlers({
   }
 
   function handleGithubConnect() {
-    window.location.assign("/api/me/integrations/github/start");
+    void startOAuthFlow("/api/me/integrations/github/start");
   }
 
   function handleBitbucketConnect() {
-    window.location.assign("/api/me/integrations/bitbucket/start");
+    void startOAuthFlow("/api/me/integrations/bitbucket/start");
   }
 
   async function handleBitbucketDisconnect() {
@@ -161,6 +173,7 @@ export function useWorkspaceConnectorHandlers({
       setBitbucketConnection(result);
       setBitbucketRepositories([]);
       setConnectorStatus("Bitbucket disconnected.");
+      notifyWorkspaceSourcesChanged();
     } catch (error) {
       handleApiError(error, setConnectorError);
     } finally {
@@ -169,7 +182,7 @@ export function useWorkspaceConnectorHandlers({
   }
 
   function handleGitlabConnect() {
-    window.location.assign("/api/me/integrations/gitlab/start");
+    void startOAuthFlow("/api/me/integrations/gitlab/start");
   }
 
   async function handleGitlabDisconnect() {
@@ -182,6 +195,7 @@ export function useWorkspaceConnectorHandlers({
       setGitlabConnection(result);
       setGitlabProjects([]);
       setConnectorStatus("GitLab disconnected.");
+      notifyWorkspaceSourcesChanged();
     } catch (error) {
       handleApiError(error, setConnectorError);
     } finally {
@@ -198,6 +212,7 @@ export function useWorkspaceConnectorHandlers({
       );
       setGithubConnection(result);
       setConnectorStatus("GitHub disconnected.");
+      notifyWorkspaceSourcesChanged();
     } catch (error) {
       handleApiError(error, setConnectorError);
     } finally {

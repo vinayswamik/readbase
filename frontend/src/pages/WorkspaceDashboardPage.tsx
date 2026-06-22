@@ -8,21 +8,19 @@ import {
   postJson,
 } from "../api";
 import type {
-  AuthUser,
   Workspace,
-  WorkspaceMember,
-  WorkspaceMembersResponse,
   WorkspacesResponse,
 } from "../types";
+import { AppToast } from "../components/AppToast";
 
 export function WorkspaceDashboardPage({
-  user,
   onSelectWorkspace,
   onSessionExpired,
+  onLeaveWorkspace,
 }: {
-  user: AuthUser;
   onSelectWorkspace: (workspace: Workspace) => void;
   onSessionExpired: () => void;
+  onLeaveWorkspace?: (workspace: Workspace) => void;
 }) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceName, setWorkspaceName] = useState("");
@@ -30,6 +28,7 @@ export function WorkspaceDashboardPage({
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [deletingWorkspaceId, setDeletingWorkspaceId] = useState<string | null>(null);
+  const [leavingWorkspaceId, setLeavingWorkspaceId] = useState<string | null>(null);
 
   const handleApiError = useCallback(
     (error: unknown, setMessage?: (message: string) => void) => {
@@ -104,22 +103,44 @@ export function WorkspaceDashboardPage({
     }
   }
 
+  async function handleLeaveWorkspace(workspace: Workspace) {
+    const confirmed = window.confirm(
+      `Leave workspace "${workspace.name}"?\n\nYou will lose access until someone invites you again from the org graph.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setLeavingWorkspaceId(workspace.workspace_id);
+    setWorkspaceStatus("");
+    setWorkspaceError(null);
+    try {
+      await postJson<Record<string, never>, Workspace>(
+        `/api/workspaces/${encodeURIComponent(workspace.workspace_id)}/leave`,
+        {},
+      );
+      setWorkspaceStatus(`Left workspace: ${workspace.name}`);
+      onLeaveWorkspace?.(workspace);
+      await loadWorkspaces();
+    } catch (error) {
+      handleApiError(error, setWorkspaceError);
+    } finally {
+      setLeavingWorkspaceId(null);
+    }
+  }
+
   return (
     <section className="workspace-home">
       <div className="workspace-header">
         <div>
           <h1>Workspaces</h1>
-          <p>
-            {user.role === "admin"
-              ? "Create workspaces, add members, and open shared codebase Q&A."
-              : "Open workspaces where an admin has added your Google account."}
-          </p>
+          <p>Create a workspace for your team. Teammates are added when someone invites them from the hierarchy graph.</p>
         </div>
       </div>
 
-      {user.role === "admin" ? (
+      <div className="workspace-entry-forms">
         <form className="workspace-create-form" onSubmit={handleWorkspaceSubmit}>
-          <label htmlFor="workspaceName">Workspace name</label>
+          <label htmlFor="workspaceName">Create a workspace</label>
           <div className="workspace-create-row">
             <input
               id="workspaceName"
@@ -134,18 +155,17 @@ export function WorkspaceDashboardPage({
             </button>
           </div>
         </form>
-      ) : null}
-
-      {workspaceError ? <div className="status-text error-text">{workspaceError}</div> : null}
-      {workspaceStatus ? <div className="status-text">{workspaceStatus}</div> : null}
+      </div>
 
       <WorkspaceList
         workspaces={workspaces}
         deletingWorkspaceId={deletingWorkspaceId}
+        leavingWorkspaceId={leavingWorkspaceId}
         onSelect={onSelectWorkspace}
         onDelete={handleDeleteWorkspace}
-        onSessionExpired={onSessionExpired}
+        onLeave={handleLeaveWorkspace}
       />
+      <AppToast message={workspaceError || workspaceStatus} error={Boolean(workspaceError)} />
     </section>
   );
 }
@@ -153,197 +173,164 @@ export function WorkspaceDashboardPage({
 function WorkspaceList({
   workspaces,
   deletingWorkspaceId,
+  leavingWorkspaceId,
   onSelect,
   onDelete,
-  onSessionExpired,
+  onLeave,
 }: {
   workspaces: Workspace[];
   deletingWorkspaceId: string | null;
+  leavingWorkspaceId: string | null;
   onSelect: (workspace: Workspace) => void;
   onDelete: (workspace: Workspace) => void;
-  onSessionExpired: () => void;
+  onLeave: (workspace: Workspace) => void;
 }) {
+  const ownedWorkspaces = workspaces.filter((workspace) => workspace.can_manage);
+  const joinedWorkspaces = workspaces.filter((workspace) => !workspace.can_manage);
+
   if (!workspaces.length) {
-    return <div className="status-text">No workspaces available for this account.</div>;
+    return (
+      <div className="status-text">
+        No workspaces yet. Create one above, or wait for a teammate to invite you from their workspace graph.
+      </div>
+    );
   }
 
   return (
-    <div className="workspace-list">
-      {workspaces.map((workspace) => (
-        <div className="workspace-item" key={workspace.workspace_id}>
-          <button
-            type="button"
-            className="workspace-open"
-            onClick={() => onSelect(workspace)}
-          >
-            <span className="workspace-name">{workspace.name}</span>
-            <span className="workspace-meta">
-              Created {formatWorkspaceDate(workspace.created_at)}
-            </span>
-          </button>
-          {workspace.can_manage ? (
-            <div className="workspace-actions">
-              <button
-                type="button"
-                className="danger-button"
-                disabled={deletingWorkspaceId === workspace.workspace_id}
-                onClick={() => onDelete(workspace)}
-              >
-                {deletingWorkspaceId === workspace.workspace_id ? "Deleting..." : "Delete"}
-              </button>
-              <MemberManager
-                workspace={workspace}
-                onSessionExpired={onSessionExpired}
-              />
-            </div>
-          ) : null}
-        </div>
-      ))}
+    <div className="workspace-groups">
+      {ownedWorkspaces.length ? (
+        <WorkspaceGroup
+          title="Your workspaces"
+          description="Workspaces you created. You manage settings and the org graph."
+          variant="owned"
+          workspaces={ownedWorkspaces}
+          deletingWorkspaceId={deletingWorkspaceId}
+          leavingWorkspaceId={leavingWorkspaceId}
+          onSelect={onSelect}
+          onDelete={onDelete}
+          onLeave={onLeave}
+        />
+      ) : null}
+      {joinedWorkspaces.length ? (
+        <WorkspaceGroup
+          title="Joined workspaces"
+          description="Workspaces where a teammate invited you by email from the hierarchy graph."
+          variant="joined"
+          workspaces={joinedWorkspaces}
+          deletingWorkspaceId={deletingWorkspaceId}
+          leavingWorkspaceId={leavingWorkspaceId}
+          onSelect={onSelect}
+          onDelete={onDelete}
+          onLeave={onLeave}
+        />
+      ) : null}
     </div>
   );
 }
 
-function MemberManager({
+function WorkspaceGroup({
+  title,
+  description,
+  variant,
+  workspaces,
+  deletingWorkspaceId,
+  leavingWorkspaceId,
+  onSelect,
+  onDelete,
+  onLeave,
+}: {
+  title: string;
+  description: string;
+  variant: "owned" | "joined";
+  workspaces: Workspace[];
+  deletingWorkspaceId: string | null;
+  leavingWorkspaceId: string | null;
+  onSelect: (workspace: Workspace) => void;
+  onDelete: (workspace: Workspace) => void;
+  onLeave: (workspace: Workspace) => void;
+}) {
+  return (
+    <section
+      className={`workspace-group workspace-group--${variant}`}
+      aria-labelledby={`workspace-group-${variant}`}
+    >
+      <header className="workspace-group-header">
+        <div>
+          <h2 id={`workspace-group-${variant}`}>{title}</h2>
+          <p>{description}</p>
+        </div>
+        <span className="workspace-group-count">
+          {workspaces.length} {workspaces.length === 1 ? "workspace" : "workspaces"}
+        </span>
+      </header>
+      <div className="workspace-list">
+        {workspaces.map((workspace) => (
+          <WorkspaceListItem
+            key={workspace.workspace_id}
+            workspace={workspace}
+            deletingWorkspaceId={deletingWorkspaceId}
+            leavingWorkspaceId={leavingWorkspaceId}
+            onSelect={onSelect}
+            onDelete={onDelete}
+            onLeave={onLeave}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function WorkspaceListItem({
   workspace,
-  onSessionExpired,
+  deletingWorkspaceId,
+  leavingWorkspaceId,
+  onSelect,
+  onDelete,
+  onLeave,
 }: {
   workspace: Workspace;
-  onSessionExpired: () => void;
+  deletingWorkspaceId: string | null;
+  leavingWorkspaceId: string | null;
+  onSelect: (workspace: Workspace) => void;
+  onDelete: (workspace: Workspace) => void;
+  onLeave: (workspace: Workspace) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [members, setMembers] = useState<WorkspaceMember[]>([]);
-  const [email, setEmail] = useState("");
-  const [status, setStatus] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const handleApiError = useCallback(
-    (apiError: unknown) => {
-      const message = getErrorMessage(apiError);
-      setError(message);
-      if (isSessionExpiredMessage(message)) {
-        onSessionExpired();
-      }
-    },
-    [onSessionExpired],
-  );
-
-  const loadMembers = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await fetchJson<WorkspaceMembersResponse>(
-        `/api/workspaces/${workspace.workspace_id}/members`,
-      );
-      setMembers(result.members || []);
-    } catch (apiError) {
-      handleApiError(apiError);
-    } finally {
-      setLoading(false);
-    }
-  }, [handleApiError, workspace.workspace_id]);
-
-  useEffect(() => {
-    if (open) {
-      void loadMembers();
-    }
-  }, [loadMembers, open]);
-
-  async function handleAddMember(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const trimmedEmail = email.trim();
-    if (!trimmedEmail) {
-      return;
-    }
-    setLoading(true);
-    setStatus("");
-    setError(null);
-    try {
-      await postJson<{ email: string }, WorkspaceMember>(
-        `/api/workspaces/${workspace.workspace_id}/members`,
-        { email: trimmedEmail },
-      );
-      setEmail("");
-      setStatus(`Member added: ${trimmedEmail}`);
-      await loadMembers();
-    } catch (apiError) {
-      handleApiError(apiError);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleRemoveMember(member: WorkspaceMember) {
-    setLoading(true);
-    setStatus("");
-    setError(null);
-    try {
-      await deleteJson<WorkspaceMember>(
-        `/api/workspaces/${workspace.workspace_id}/members/${encodeURIComponent(
-          member.email,
-        )}`,
-      );
-      setStatus(`Member removed: ${member.email}`);
-      await loadMembers();
-    } catch (apiError) {
-      handleApiError(apiError);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const isLeaving = leavingWorkspaceId === workspace.workspace_id;
+  const isDeleting = deletingWorkspaceId === workspace.workspace_id;
 
   return (
-    <div className="member-manager">
+    <div className="workspace-item">
       <button
         type="button"
-        className="secondary-action-button"
-        onClick={() => setOpen((currentOpen) => !currentOpen)}
+        className="workspace-open"
+        onClick={() => onSelect(workspace)}
       >
-        {open ? "Hide members" : "Members"}
+        <span className="workspace-name">{workspace.name}</span>
+        <span className="workspace-meta">
+          Created {formatWorkspaceDate(workspace.created_at)}
+        </span>
       </button>
-
-      {open ? (
-        <div className="member-panel">
-          <form className="member-add-form" onSubmit={handleAddMember}>
-            <input
-              type="email"
-              value={email}
-              placeholder="member@example.com"
-              required
-              onChange={(event) => setEmail(event.target.value)}
-            />
-            <button type="submit" className="primary-button" disabled={loading}>
-              Add
-            </button>
-          </form>
-
-          {error ? <div className="status-text error-text">{error}</div> : null}
-          {status ? <div className="status-text">{status}</div> : null}
-
-          <div className="member-list">
-            {members.map((member) => (
-              <div className="member-row" key={member.email}>
-                <span>{member.email}</span>
-                {member.is_owner ? (
-                  <span className="workspace-meta">Owner</span>
-                ) : (
-                  <button
-                    type="button"
-                    className="danger-button"
-                    disabled={loading}
-                    onClick={() => handleRemoveMember(member)}
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
-            ))}
-            {!members.length && !loading ? (
-              <div className="status-text">No members yet.</div>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
+      <div className="workspace-actions">
+        {workspace.can_manage ? (
+          <button
+            type="button"
+            className="danger-button"
+            disabled={isDeleting || isLeaving}
+            onClick={() => onDelete(workspace)}
+          >
+            {isDeleting ? "Deleting..." : "Delete"}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="secondary-action-button"
+            disabled={isLeaving || isDeleting}
+            onClick={() => onLeave(workspace)}
+          >
+            {isLeaving ? "Leaving..." : "Leave"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

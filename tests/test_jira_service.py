@@ -16,7 +16,7 @@ class JiraServiceTests(unittest.TestCase):
         self.original_url = str(database.engine.url)
         database.configure_database(f"sqlite:///{self.data_dir / 'test.db'}")
         database.Base.metadata.drop_all(bind=database.engine)
-        database.init_database(seed_admins=False)
+        database.init_database()
 
     def tearDown(self):
         database.Base.metadata.drop_all(bind=database.engine)
@@ -41,6 +41,12 @@ class JiraServiceTests(unittest.TestCase):
             workspace["workspace_id"],
             "member@example.com",
             True,
+        )
+        jira_service.connect_workspace_jira_site(
+            workspace["workspace_id"],
+            "member-1",
+            "member@example.com",
+            "cloud-1",
         )
         source = jira_service.add_workspace_jira_source(
             workspace["workspace_id"],

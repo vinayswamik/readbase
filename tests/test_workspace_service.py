@@ -19,10 +19,10 @@ class WorkspaceServiceTests(unittest.TestCase):
         self.original_url = str(database.engine.url)
         database.configure_database(f"sqlite:///{self.data_dir / 'test.db'}")
         database.Base.metadata.drop_all(bind=database.engine)
-        database.init_database(seed_admins=False)
+        database.init_database()
         self.patches = [
             patch.object(workspace_service, "DATA_DIR", self.data_dir),
-            patch.object(workspace_service, "WORKSPACES_DIR", self.data_dir / "workspaces"),
+            patch("src.backend.infrastructure.storage.paths.DATA_DIR", self.data_dir),
             patch.object(workspace_service, "CLI_STATE_FILE", self.data_dir / "cli-state.json"),
         ]
         for active_patch in self.patches:
@@ -35,7 +35,7 @@ class WorkspaceServiceTests(unittest.TestCase):
         database.configure_database(self.original_url)
         self.temp_dir.cleanup()
 
-    def test_admin_create_workspace_adds_owner_membership(self):
+    def test_create_workspace_adds_owner_membership(self):
         workspace = workspace_service.create_workspace(
             "admin-1",
             "Demo",
@@ -51,7 +51,6 @@ class WorkspaceServiceTests(unittest.TestCase):
             workspace_service.list_workspaces(
                 "admin-1",
                 user_email="admin@example.com",
-                user_role="admin",
             ),
             [workspace],
         )
@@ -76,7 +75,7 @@ class WorkspaceServiceTests(unittest.TestCase):
             1,
         )
 
-    def test_member_can_access_assigned_workspace_by_email(self):
+    def test_member_only_sees_workspace_after_graph_node_exists(self):
         workspace = workspace_service.create_workspace("admin-1", "Demo", owner_email="admin@example.com")
         workspace_service.add_workspace_member(
             "admin-1",
@@ -87,9 +86,26 @@ class WorkspaceServiceTests(unittest.TestCase):
         member_workspaces = workspace_service.list_workspaces(
             "member-1",
             user_email="member@example.com",
-            user_role="member",
+        )
+        self.assertEqual(member_workspaces, [])
+
+        from src.backend.application.services.auth_service import AuthUser, GoogleIdentity, upsert_authenticated_user
+        from src.backend.application.services.hierarchy_graph_service import create_hierarchy_node
+
+        upsert_authenticated_user(
+            GoogleIdentity("member-1", "member@example.com", "Member")
+        )
+        create_hierarchy_node(
+            workspace["workspace_id"],
+            AuthUser("admin-1", "admin@example.com", "Admin"),
+            display_name="Member",
+            assigned_user_id="member-1",
         )
 
+        member_workspaces = workspace_service.list_workspaces(
+            "member-1",
+            user_email="member@example.com",
+        )
         self.assertEqual(len(member_workspaces), 1)
         self.assertFalse(member_workspaces[0]["can_manage"])
 
@@ -112,7 +128,6 @@ class WorkspaceServiceTests(unittest.TestCase):
     def test_delete_workspace_removes_metadata_and_storage(self):
         workspace = workspace_service.create_workspace("admin-1", "Demo", owner_email="admin@example.com")
         root = workspace_service.workspace_root(workspace["workspace_id"])
-        (root / "indexes").mkdir(parents=True)
         (root / "indexes" / "repo.json").write_text("{}", encoding="utf-8")
 
         with patch.object(workspace_service, "list_indexes", return_value=[]):

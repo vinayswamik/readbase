@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { KeyboardEvent } from "react";
 
 import {
@@ -7,9 +7,11 @@ import {
   getErrorMessage,
   isSessionExpiredMessage,
 } from "../../api";
+import { startOAuthFlow } from "../../mock/dev";
 import type {
   BitbucketConnection,
   ConfluenceConnection,
+  NotionConnection,
   GitlabConnection,
   GithubConnection,
   JiraConnection,
@@ -19,14 +21,16 @@ import type {
 } from "../../types";
 import {
   CONNECTORS,
-  ConnectorLogo,
   type ConnectorConfig,
   type ConnectorId,
-} from "../WorkspaceLeftPanel";
+} from "../workspace/connectors/connectors";
+import { ConnectorLogo } from "../workspace/connectors/ConnectorLogo";
+import { AppToast } from "../../components/AppToast";
 
 type ConnectionMap = {
   bitbucket: BitbucketConnection | null;
   confluence: ConfluenceConnection | null;
+  notion: NotionConnection | null;
   github: GithubConnection | null;
   gitlab: GitlabConnection | null;
   jira: JiraConnection | null;
@@ -38,6 +42,7 @@ type ConnectionMap = {
 const EMPTY_CONNECTIONS: ConnectionMap = {
   bitbucket: null,
   confluence: null,
+  notion: null,
   github: null,
   gitlab: null,
   jira: null,
@@ -46,12 +51,16 @@ const EMPTY_CONNECTIONS: ConnectionMap = {
   teams: null,
 };
 
+const CONNECTED_ORDER_STORAGE_KEY = "readbase:homeConnectedConnectorOrder";
+
 export function HomeConnectorRail({
   onSessionExpired,
 }: {
   onSessionExpired: () => void;
 }) {
   const [connections, setConnections] = useState<ConnectionMap>(EMPTY_CONNECTIONS);
+  const [connectedOrder, setConnectedOrder] = useState<ConnectorId[]>(() => readConnectedOrder());
+  const [connectionsLoaded, setConnectionsLoaded] = useState(false);
   const [loadingConnectorId, setLoadingConnectorId] = useState<ConnectorId | null>(null);
   const [pendingDisconnectConnector, setPendingDisconnectConnector] = useState<ConnectorConfig | null>(null);
   const [removeDataConfirmation, setRemoveDataConfirmation] = useState("");
@@ -86,7 +95,35 @@ export function HomeConnectorRail({
 
   const loadConnections = useCallback(async () => {
     await Promise.all(CONNECTORS.map((connector) => loadConnection(connector.id)));
+    setConnectionsLoaded(true);
   }, [loadConnection]);
+
+  useEffect(() => {
+    if (!connectionsLoaded) {
+      return;
+    }
+
+    const url = new URL(window.location.href);
+    let recentlyConnected: ConnectorId | null = null;
+    for (const connector of CONNECTORS) {
+      if (url.searchParams.get(`${connector.id}_connected`) !== "1") {
+        continue;
+      }
+      recentlyConnected = connector.id;
+      url.searchParams.delete(`${connector.id}_connected`);
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+      break;
+    }
+
+    setConnectedOrder((currentOrder) => {
+      const syncedOrder = syncConnectedOrder(currentOrder, connections);
+      const nextOrder = recentlyConnected
+        ? moveConnectorToConnectedEnd(syncedOrder, recentlyConnected)
+        : syncedOrder;
+      writeConnectedOrder(nextOrder);
+      return nextOrder;
+    });
+  }, [connectionsLoaded, connections]);
 
   useEffect(() => {
     void loadConnections();
@@ -109,7 +146,7 @@ export function HomeConnectorRail({
     setLoadingConnectorId(connectorId);
     setStatus("");
     setError(null);
-    window.location.assign(`/api/me/integrations/${connectorId}/start`);
+    void startOAuthFlow(`/api/me/integrations/${connectorId}/start`);
   }
 
   function openDisconnectModal(connector: ConnectorConfig) {
@@ -127,6 +164,65 @@ export function HomeConnectorRail({
     setRemoveDataConfirmation("");
   }
 
+  const connectedConnectors = useMemo(() => {
+    const connected = CONNECTORS.filter((connector) => isConnected(connector, connections[connector.id]));
+    return connected.sort((left, right) => compareConnectedOrder(left, right, connectedOrder));
+  }, [connections, connectedOrder]);
+
+  const disconnectedConnectors = useMemo(
+    () => CONNECTORS.filter((connector) => !isConnected(connector, connections[connector.id])),
+    [connections],
+  );
+
+  function renderConnectorTab(connector: ConnectorConfig) {
+    const connected = isConnected(connector, connections[connector.id]);
+    const loading = loadingConnectorId === connector.id;
+    return (
+      <div
+        className={`home-connector-tab${connected ? " connected" : ""}${loading ? " loading" : ""}`}
+        key={connector.id}
+      >
+        <span className="home-connector-identity">
+          <ConnectorLogo connectorId={connector.id} />
+          <span>{connector.name}</span>
+        </span>
+        <span className="home-connector-actions">
+          {connected ? (
+            <button
+              type="button"
+              className="home-connection-state connected"
+              disabled={Boolean(loadingConnectorId)}
+              onClick={() => openDisconnectModal(connector)}
+            >
+              {loading ? (
+                "Disconnecting..."
+              ) : (
+                <>
+                  <span>Manage</span>
+                  <span className="home-manage-arrow" aria-hidden="true">
+                    <svg viewBox="0 0 16 16" focusable="false">
+                      <path d="M5 4h7v7" />
+                      <path d="m4 12 8-8" />
+                    </svg>
+                  </span>
+                </>
+              )}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="home-connection-state disconnected"
+              disabled={Boolean(loadingConnectorId)}
+              onClick={() => handleConnect(connector)}
+            >
+              {loading ? "Connecting..." : "Connect"}
+            </button>
+          )}
+        </span>
+      </div>
+    );
+  }
+
   async function handleDisconnect(connector: ConnectorConfig, removeData: boolean) {
     if (loadingConnectorId) {
       return;
@@ -140,6 +236,11 @@ export function HomeConnectorRail({
         ...currentConnections,
         [connector.id]: result,
       }));
+      setConnectedOrder((currentOrder) => {
+        const nextOrder = currentOrder.filter((connectorId) => connectorId !== connector.id);
+        writeConnectedOrder(nextOrder);
+        return nextOrder;
+      });
       setStatus(removeData ? `${connector.name} disconnected and data removal requested.` : `${connector.name} disconnected.`);
       setPendingDisconnectConnector(null);
       setRemoveDataConfirmation("");
@@ -155,61 +256,14 @@ export function HomeConnectorRail({
       <div className="home-connector-box">
         <div className="home-connector-title">Connectors</div>
         <div className="home-connector-tabs" aria-label="Connector accounts">
-          {CONNECTORS.map((connector) => {
-            const connected = isConnected(connector, connections[connector.id]);
-            const loading = loadingConnectorId === connector.id;
-            return (
-              <div
-                className={`home-connector-tab${connected ? " connected" : ""}${loading ? " loading" : ""}`}
-                key={connector.id}
-              >
-                <span className="home-connector-identity">
-                  <ConnectorLogo connectorId={connector.id} />
-                  <span>{connector.name}</span>
-                </span>
-                <span className="home-connector-actions">
-                  {connected ? (
-                    <button
-                      type="button"
-                      className="home-connection-state connected"
-                      disabled={Boolean(loadingConnectorId)}
-                      onClick={() => openDisconnectModal(connector)}
-                    >
-                      {loading ? (
-                        "Disconnecting..."
-                      ) : (
-                        <>
-                          <span>Manage</span>
-                          <span className="home-manage-arrow" aria-hidden="true">
-                            <svg viewBox="0 0 16 16" focusable="false">
-                              <path d="M5 4h7v7" />
-                              <path d="m4 12 8-8" />
-                            </svg>
-                          </span>
-                        </>
-                      )}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="home-connection-state disconnected"
-                      disabled={Boolean(loadingConnectorId)}
-                      onClick={() => handleConnect(connector)}
-                    >
-                      {loading ? "Connecting..." : "Connect"}
-                    </button>
-                  )}
-                </span>
-              </div>
-            );
-          })}
+          {connectedConnectors.map(renderConnectorTab)}
+          {connectedConnectors.length > 0 && disconnectedConnectors.length > 0 ? (
+            <div className="home-connector-divider" role="separator" aria-hidden="true" />
+          ) : null}
+          {disconnectedConnectors.map(renderConnectorTab)}
         </div>
       </div>
-      {error || status ? (
-        <div className={`home-connector-toast${error ? " error" : ""}`} role="status" aria-live="polite">
-          {error || status}
-        </div>
-      ) : null}
+      <AppToast message={error || status} error={Boolean(error)} />
       {pendingDisconnectConnector ? (
         <DisconnectConnectorModal
           connector={pendingDisconnectConnector}
@@ -247,7 +301,13 @@ async function fetchConnectorConnection(connectorId: ConnectorId): Promise<Conne
   if (connectorId === "linear") {
     return fetchJson<LinearConnection>("/api/me/integrations/linear");
   }
-  return fetchJson<ConfluenceConnection>("/api/me/integrations/confluence");
+  if (connectorId === "confluence") {
+    return fetchJson<ConfluenceConnection>("/api/me/integrations/confluence");
+  }
+  if (connectorId === "notion") {
+    return fetchJson<NotionConnection>("/api/me/integrations/notion");
+  }
+  return fetchJson<TeamsConnection>("/api/me/integrations/teams");
 }
 
 async function deleteConnectorConnection(connectorId: ConnectorId, removeData: boolean): Promise<ConnectionMap[ConnectorId]> {
@@ -273,7 +333,72 @@ async function deleteConnectorConnection(connectorId: ConnectorId, removeData: b
   if (connectorId === "linear") {
     return deleteJson<LinearConnection>(`/api/me/integrations/linear${params}`);
   }
-  return deleteJson<ConfluenceConnection>(`/api/me/integrations/confluence${params}`);
+  if (connectorId === "confluence") {
+    return deleteJson<ConfluenceConnection>(`/api/me/integrations/confluence${params}`);
+  }
+  if (connectorId === "notion") {
+    return deleteJson<NotionConnection>(`/api/me/integrations/notion${params}`);
+  }
+  return deleteJson<TeamsConnection>(`/api/me/integrations/teams${params}`);
+}
+
+function readConnectedOrder(): ConnectorId[] {
+  try {
+    const storedOrder = window.localStorage.getItem(CONNECTED_ORDER_STORAGE_KEY);
+    if (!storedOrder) {
+      return [];
+    }
+    const parsed = JSON.parse(storedOrder);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.filter(
+      (connectorId): connectorId is ConnectorId =>
+        typeof connectorId === "string" && CONNECTORS.some((connector) => connector.id === connectorId),
+    );
+  } catch {
+    return [];
+  }
+}
+
+function writeConnectedOrder(order: ConnectorId[]) {
+  window.localStorage.setItem(CONNECTED_ORDER_STORAGE_KEY, JSON.stringify(order));
+}
+
+function syncConnectedOrder(order: ConnectorId[], connections: ConnectionMap): ConnectorId[] {
+  const connectedIds = CONNECTORS.filter((connector) => isConnected(connector, connections[connector.id])).map(
+    (connector) => connector.id,
+  );
+  const nextOrder = order.filter((connectorId) => connectedIds.includes(connectorId));
+  for (const connector of CONNECTORS) {
+    if (connectedIds.includes(connector.id) && !nextOrder.includes(connector.id)) {
+      nextOrder.push(connector.id);
+    }
+  }
+  return nextOrder;
+}
+
+function moveConnectorToConnectedEnd(order: ConnectorId[], connectorId: ConnectorId): ConnectorId[] {
+  return [...order.filter((currentId) => currentId !== connectorId), connectorId];
+}
+
+function compareConnectedOrder(
+  left: ConnectorConfig,
+  right: ConnectorConfig,
+  connectedOrder: ConnectorId[],
+): number {
+  const leftIndex = connectedOrder.indexOf(left.id);
+  const rightIndex = connectedOrder.indexOf(right.id);
+  if (leftIndex === -1 && rightIndex === -1) {
+    return CONNECTORS.indexOf(left) - CONNECTORS.indexOf(right);
+  }
+  if (leftIndex === -1) {
+    return 1;
+  }
+  if (rightIndex === -1) {
+    return -1;
+  }
+  return leftIndex - rightIndex;
 }
 
 function isConnected(connector: ConnectorConfig, connection: ConnectionMap[ConnectorId]): boolean {
@@ -351,7 +476,9 @@ function DisconnectConnectorModal({
             <p>Choose whether to keep workspace data or remove synced data owned by this connection.</p>
           </div>
           <button type="button" className="connector-close-button" aria-label="Close disconnect warning" disabled={loading} onClick={onClose}>
-            x
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+            </svg>
           </button>
         </header>
         <div className="home-disconnect-body">
@@ -382,7 +509,7 @@ function DisconnectConnectorModal({
           />
         </div>
         <div className="home-disconnect-actions">
-          <button type="button" className="secondary-action-button" disabled={loading} onClick={onClose}>
+          <button type="button" className="modal-cancel-button" disabled={loading} onClick={onClose}>
             Cancel
           </button>
           <button type="button" className="secondary-action-button" disabled={loading} onClick={onDisconnect}>

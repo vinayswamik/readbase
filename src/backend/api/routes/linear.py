@@ -3,10 +3,11 @@ from __future__ import annotations
 from fastapi import APIRouter, Cookie, Depends, Query
 from fastapi.responses import RedirectResponse
 
-from src.backend.api.auth import require_authenticated_user
+from src.backend.api.auth import require_authenticated_user, require_workspace_access, require_workspace_storage_write
 from src.backend.api.errors import service_error_to_http
 from src.backend.api.schemas import AddWorkspaceLinearSourceRequest, LinearConnectionResponse, LinearSelectableSourcesResponse, WorkspaceLinearSourceResponse, WorkspaceLinearSourcesResponse
 from src.backend.application.services.auth_service import SESSION_SECURE_COOKIE
+from src.backend.application.services.connectors.oauth_core import oauth_states_match
 from src.backend.application.services.exceptions import ServiceError
 from src.backend.application.services.linear_service import (
     LINEAR_OAUTH_STATE_TTL_SECONDS,
@@ -47,7 +48,7 @@ def complete_linear_connection(
 ) -> RedirectResponse:
     redirect = RedirectResponse(url="/?linear_connected=1", status_code=303)
     redirect.delete_cookie(key=LINEAR_STATE_COOKIE_NAME, path="/")
-    if not code or not state or not linear_state_cookie or state != linear_state_cookie:
+    if not code or not oauth_states_match(state, linear_state_cookie):
         return RedirectResponse(url="/?linear_error=invalid_state", status_code=303)
     try:
         exchange_linear_code_for_connection(user.user_id, code)
@@ -84,7 +85,11 @@ def linear_selectable_sources(query: str = Query(default=""), user=Depends(requi
 
 
 @router.get("/workspaces/{workspace_id}/linear/sources", response_model=WorkspaceLinearSourcesResponse)
-def workspace_linear_sources(workspace_id: str, user=Depends(require_authenticated_user)) -> dict:
+def workspace_linear_sources(
+    workspace_id: str,
+    user=Depends(require_authenticated_user),
+    _workspace=Depends(require_workspace_access),
+) -> dict:
     try:
         return {"sources": list_workspace_linear_sources(workspace_id, user.user_id)}
     except ServiceError as exc:
@@ -92,7 +97,12 @@ def workspace_linear_sources(workspace_id: str, user=Depends(require_authenticat
 
 
 @router.post("/workspaces/{workspace_id}/linear/sources", response_model=WorkspaceLinearSourceResponse)
-def add_linear_source(workspace_id: str, payload: AddWorkspaceLinearSourceRequest, user=Depends(require_authenticated_user)) -> dict:
+def add_linear_source(
+    workspace_id: str,
+    payload: AddWorkspaceLinearSourceRequest,
+    user=Depends(require_authenticated_user),
+    _workspace=Depends(require_workspace_storage_write),
+) -> dict:
     try:
         return add_workspace_linear_source(workspace_id, user.user_id, user.email, payload.dict())
     except ServiceError as exc:
@@ -100,7 +110,12 @@ def add_linear_source(workspace_id: str, payload: AddWorkspaceLinearSourceReques
 
 
 @router.delete("/workspaces/{workspace_id}/linear/sources/{source_id}", response_model=WorkspaceLinearSourceResponse)
-def remove_linear_source(workspace_id: str, source_id: str, user=Depends(require_authenticated_user)) -> dict:
+def remove_linear_source(
+    workspace_id: str,
+    source_id: str,
+    user=Depends(require_authenticated_user),
+    _workspace=Depends(require_workspace_storage_write),
+) -> dict:
     try:
         return remove_workspace_linear_source(workspace_id, source_id, user.user_id, user.email)
     except ServiceError as exc:
@@ -108,7 +123,12 @@ def remove_linear_source(workspace_id: str, source_id: str, user=Depends(require
 
 
 @router.post("/workspaces/{workspace_id}/linear/sources/{source_id}/sync", response_model=WorkspaceLinearSourceResponse)
-def sync_linear_source(workspace_id: str, source_id: str, user=Depends(require_authenticated_user)) -> dict:
+def sync_linear_source(
+    workspace_id: str,
+    source_id: str,
+    user=Depends(require_authenticated_user),
+    _workspace=Depends(require_workspace_storage_write),
+) -> dict:
     try:
         return sync_workspace_linear_source(source_id, workspace_id)
     except ServiceError as exc:

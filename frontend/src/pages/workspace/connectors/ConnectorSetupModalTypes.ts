@@ -5,21 +5,26 @@ import type {
   BitbucketRepository,
   ConfluenceConnection,
   ConfluenceSpace,
+  NotionConnection,
+  NotionDatabase,
   GitlabConnection,
   GitlabProject,
   GithubConnection,
   GithubRepository,
   JiraConnection,
   JiraProject,
+  JiraSite,
   LinearConnection,
   LinearSelectableSource,
   SlackChannel,
   SlackConnection,
   WorkspaceJiraSource,
+  WorkspaceJiraSiteStatus,
   WorkspaceConfluenceSource,
+  WorkspaceNotionSource,
   WorkspaceLinearSource,
   WorkspaceSlackSource,
-  WorkspaceMember,
+  WorkspaceSlackTeam,
 } from "../../../types";
 import type { ConnectorConfig } from "./connectors";
 
@@ -27,8 +32,6 @@ export type ConnectorSetupModalProps = {
   connector: ConnectorConfig;
   repoUrl: string;
   refreshRepo: boolean;
-  members: WorkspaceMember[];
-  loadingMembers: boolean;
   indexing: boolean;
   status: string;
   error: string | null;
@@ -49,7 +52,9 @@ export type ConnectorSetupModalProps = {
   jiraProjects: JiraProject[];
   jiraProjectQuery: string;
   jiraLoading: boolean;
+  jiraWorkspaceSite: WorkspaceJiraSiteStatus | null;
   slackConnection: SlackConnection | null;
+  slackTeams: WorkspaceSlackTeam[];
   slackSources: WorkspaceSlackSource[];
   slackChannels: SlackChannel[];
   slackChannelQuery: string;
@@ -64,7 +69,11 @@ export type ConnectorSetupModalProps = {
   confluenceSpaces: ConfluenceSpace[];
   confluenceQuery: string;
   confluenceLoading: boolean;
-  canManageWorkspace: boolean;
+  notionConnection: NotionConnection | null;
+  notionSources: WorkspaceNotionSource[];
+  notionDatabases: NotionDatabase[];
+  notionQuery: string;
+  notionLoading: boolean;
   onRepoUrlChange: (repoUrl: string) => void;
   onGithubRepositoryQueryChange: (query: string) => void;
   onGithubRepositorySearch: () => void;
@@ -81,7 +90,8 @@ export type ConnectorSetupModalProps = {
   onGitlabConnect: () => void;
   onGitlabDisconnect: () => void;
   onJiraConnect: () => void;
-  onJiraDisconnect: () => void;
+  onConnectJiraSite: (site: JiraSite) => void;
+  onRemoveJiraSite: () => void;
   onJiraProjectQueryChange: (query: string) => void;
   onJiraProjectSearch: () => void;
   onAddJiraProject: (project: JiraProject) => void;
@@ -89,6 +99,7 @@ export type ConnectorSetupModalProps = {
   onRemoveJiraSource: (sourceId: string) => void;
   onSlackConnect: () => void;
   onSlackDisconnect: (teamId?: string) => void;
+  onSlackUnlinkTeam: (teamId: string) => void;
   onSlackChannelQueryChange: (query: string) => void;
   onAddSlackChannel: (channel: SlackChannel) => void;
   onSyncSlackSource: (sourceId: string) => void;
@@ -107,6 +118,12 @@ export type ConnectorSetupModalProps = {
   onAddConfluenceSpace: (space: ConfluenceSpace) => void;
   onSyncConfluenceSource: (sourceId: string) => void;
   onRemoveConfluenceSource: (sourceId: string) => void;
-  onConnectorManagerToggle: (member: WorkspaceMember) => void;
+  onNotionConnect: () => void;
+  onNotionDisconnect: () => void;
+  onNotionQueryChange: (query: string) => void;
+  onNotionSearch: () => void;
+  onAddNotionDatabase: (database: NotionDatabase) => void;
+  onSyncNotionSource: (sourceId: string) => void;
+  onRemoveNotionSource: (sourceId: string) => void;
   onClose: () => void;
 };

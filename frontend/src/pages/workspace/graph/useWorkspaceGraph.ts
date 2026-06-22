@@ -1,8 +1,10 @@
-import { FormEvent, MouseEvent } from "react";
+import { FormEvent, MouseEvent, useState } from "react";
 
 import { deleteJson, patchJson, postJson } from "../../../api";
 import type { CreateHierarchyNodeResponse, HierarchyNode } from "../../../types";
-import type { CreateNodeDraft } from "../../WorkspaceLeftPanel";
+import type { CreateNodeDraft } from "./types";
+import type { NodeEditAnchor } from "../../WorkspaceGraphCanvas";
+import { buildInviteJoinUrl } from "../WorkspacePanelControls";
 import { clamp, useWorkspaceGraphModel } from "./useWorkspaceGraphModel";
 
 type UseWorkspaceGraphArgs = {
@@ -12,15 +14,14 @@ type UseWorkspaceGraphArgs = {
 };
 
 export function useWorkspaceGraph(args: UseWorkspaceGraphArgs) {
+  const [addNodeModalOpen, setAddNodeModalOpen] = useState(false);
+  const [editNodeModalOpen, setEditNodeModalOpen] = useState(false);
+  const [nodeEditAnchor, setNodeEditAnchor] = useState<NodeEditAnchor | null>(null);
   const model = useWorkspaceGraphModel(args);
   const {
     workspace,
     user,
     handleApiError,
-    panelOpen,
-    setPanelOpen,
-    sidebarTab,
-    setSidebarTab,
     nodes,
     setNodes,
     connections,
@@ -45,30 +46,38 @@ export function useWorkspaceGraph(args: UseWorkspaceGraphArgs) {
     boardRef,
     selectedNode,
     canManageSelectedNode,
+    canManageWorkspace,
     canDeleteSelectedNode,
     queueGraphRefresh,
   } = model;
 
-  async function handleCreateNode(draft: CreateNodeDraft): Promise<boolean> {
+  async function handleCreateNode(draft: CreateNodeDraft): Promise<boolean | string> {
     const trimmedTitle = draft.displayName.trim();
+    const trimmedEmail = draft.inviteeEmail.trim();
+    const isLinkInvite = draft.inviteMethod === "link";
     const resolvedParentId = draft.parentNodeId || "";
-    if (
-      createNodeInFlightRef.current ||
-      graphMutating ||
-      !trimmedTitle ||
-      !draft.assignedUserId ||
-      (user.role !== "admin" && !resolvedParentId)
-    ) {
+    const canSubmit = Boolean(
+      trimmedTitle &&
+        draft.relation.trim() &&
+        draft.reason.trim() &&
+        (workspace.can_manage || resolvedParentId) &&
+        (isLinkInvite || trimmedEmail),
+    );
+    if (createNodeInFlightRef.current || graphMutating || !canSubmit) {
       return false;
     }
     createNodeInFlightRef.current = true;
     setGraphMutating(true);
-    setGraphStatus("Creating node...");
+    setGraphStatus(isLinkInvite ? "Creating invite link..." : "Sending invite...");
     try {
       const result = await postJson<
         {
           display_name: string;
-          assigned_user_id: string;
+          invitee_email?: string;
+          invite_method?: string;
+          invitor_designation?: string;
+          relation: string;
+          reason: string;
           x: number;
           y: number;
           parent_node_id?: string;
@@ -76,22 +85,42 @@ export function useWorkspaceGraph(args: UseWorkspaceGraphArgs) {
         CreateHierarchyNodeResponse
       >(`/api/workspaces/${workspace.workspace_id}/graph/nodes`, {
         display_name: trimmedTitle,
-        assigned_user_id: draft.assignedUserId,
+        invite_method: isLinkInvite ? "link" : "email",
+        ...(isLinkInvite ? {} : { invitee_email: trimmedEmail }),
+        invitor_designation: draft.invitorDesignation.trim(),
+        relation: draft.relation.trim(),
+        reason: draft.reason.trim(),
         x: 0,
         y: 0,
         parent_node_id: resolvedParentId || undefined,
       });
-      setNodes((currentNodes) => [...currentNodes, result.node]);
-      const createdConnection = result.connection;
-      if (createdConnection) {
-        setConnections((currentConnections) => [
-          ...currentConnections,
-          createdConnection,
-        ]);
+      if (result.node) {
+        setNodes((currentNodes) => [...currentNodes, result.node as HierarchyNode]);
+        const createdConnection = result.connection;
+        if (createdConnection) {
+          setConnections((currentConnections) => [
+            ...currentConnections,
+            createdConnection,
+          ]);
+        }
+        setSelectedNodeId(result.node.node_id);
       }
-      setSelectedNodeId(result.node.node_id);
-      setGraphStatus("Node created.");
+      if (result.invite?.invite_method === "link") {
+        const joinUrl = buildInviteJoinUrl(result.invite.join_path, result.invite.join_token);
+        setGraphStatus("Invite link created. Copy it and share with your teammate.");
+        queueGraphRefresh();
+        window.dispatchEvent(new CustomEvent("readbase:invites-changed"));
+        return joinUrl || true;
+      }
+      setGraphStatus(
+        result.invite && !result.node
+          ? `Invite sent to ${result.invite.invitee_email}. They can accept it from the home page.`
+          : result.invite
+            ? "Node created and invite recorded."
+            : "Node created.",
+      );
       queueGraphRefresh();
+      window.dispatchEvent(new CustomEvent("readbase:invites-changed"));
       return true;
     } catch (error) {
       handleApiError(error, setGraphStatus);
@@ -131,6 +160,8 @@ export function useWorkspaceGraph(args: UseWorkspaceGraphArgs) {
         ),
       );
       setGraphStatus("Node updated.");
+      setEditNodeModalOpen(false);
+      setNodeEditAnchor(null);
       queueGraphRefresh();
     } catch (error) {
       handleApiError(error, setGraphStatus);
@@ -165,6 +196,8 @@ export function useWorkspaceGraph(args: UseWorkspaceGraphArgs) {
         ),
       );
       setSelectedNodeId(null);
+      setEditNodeModalOpen(false);
+      setNodeEditAnchor(null);
       setGraphStatus("Node deleted.");
       queueGraphRefresh();
     } catch (error) {
@@ -175,7 +208,7 @@ export function useWorkspaceGraph(args: UseWorkspaceGraphArgs) {
   }
   async function handleReparentSelectedNode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (graphMutating || user.role !== "admin" || !selectedNode) {
+    if (graphMutating || !workspace.can_manage || !selectedNode) {
       return;
     }
     setGraphMutating(true);
@@ -217,9 +250,10 @@ export function useWorkspaceGraph(args: UseWorkspaceGraphArgs) {
       return;
     }
     const target = event.target;
-    if (target instanceof Element && target.closest(".graph-node")) {
+    if (target instanceof Element && target.closest(".graph-node-shell")) {
       return;
     }
+    setNodeEditAnchor(null);
     setPanState({
       startClientX: event.clientX,
       startClientY: event.clientY,
@@ -232,8 +266,18 @@ export function useWorkspaceGraph(args: UseWorkspaceGraphArgs) {
     node: HierarchyNode,
   ) {
     event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
     setSelectedNodeId(node.node_id);
-    setSidebarTab("details");
+    setNodeEditAnchor({
+      nodeId: node.node_id,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+    });
+  }
+
+  function handleOpenEditNode(node: HierarchyNode) {
+    setSelectedNodeId(node.node_id);
+    setEditNodeModalOpen(true);
   }
   function handleBoardMouseMove(event: MouseEvent<HTMLDivElement>) {
     if (panState) {
@@ -255,10 +299,11 @@ export function useWorkspaceGraph(args: UseWorkspaceGraphArgs) {
   }
 
   return {
-    panelOpen,
-    setPanelOpen,
-    sidebarTab,
-    setSidebarTab,
+    addNodeModalOpen,
+    setAddNodeModalOpen,
+    editNodeModalOpen,
+    setEditNodeModalOpen,
+    nodeEditAnchor,
     nodes,
     graphMutating,
     graphStatus,
@@ -268,6 +313,7 @@ export function useWorkspaceGraph(args: UseWorkspaceGraphArgs) {
     availableAssignees: model.availableAssignees,
     parentOptions: model.parentOptions,
     ownNode: model.ownNode,
+    canManageWorkspace,
     canManageSelectedNode,
     editTitle,
     setEditTitle,
@@ -291,6 +337,7 @@ export function useWorkspaceGraph(args: UseWorkspaceGraphArgs) {
     handleBoardMouseMove,
     handleBoardMouseUp,
     handleNodeClick,
+    handleOpenEditNode,
     handleZoom,
     setViewport,
   };

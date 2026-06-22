@@ -1,20 +1,26 @@
-import { deleteJson, patchJson, postJson } from "../../../api";
+import { deleteJson, postJson } from "../../../api";
+import { startOAuthFlow } from "../../../mock/dev";
 import type {
   ConfluenceConnection,
   ConfluenceSpace,
-  JiraConnection,
+  NotionConnection,
+  NotionDatabase,
   JiraProject,
+  JiraSite,
   LinearConnection,
   LinearSelectableSource,
   SlackChannel,
   SlackConnection,
   Workspace,
   WorkspaceConfluenceSource,
+  WorkspaceNotionSource,
   WorkspaceJiraSource,
+  WorkspaceJiraSiteStatus,
   WorkspaceLinearSource,
-  WorkspaceMember,
   WorkspaceSlackSource,
+  WorkspaceSlackTeam,
 } from "../../../types";
+import { buildConnectorStartUrl, type ConnectorId } from "./connectors";
 import type { ConnectorLoads } from "./useWorkspaceConnectorData";
 import { useWorkspaceConnectorHandlers } from "./useWorkspaceConnectorHandlers";
 import { useWorkspaceConnectorRuntime } from "./useWorkspaceConnectorRuntime";
@@ -25,6 +31,7 @@ type UseWorkspaceConnectorsArgs = {
   selectedRepoUrl: string | undefined;
   setRepoId: (repoId: string) => void;
   loadRepos: (preferredRepoId?: string) => Promise<void>;
+  onWorkspaceSourcesChanged?: () => void;
 };
 
 export function useWorkspaceConnectors({
@@ -33,6 +40,7 @@ export function useWorkspaceConnectors({
   selectedRepoUrl,
   setRepoId,
   loadRepos,
+  onWorkspaceSourcesChanged,
 }: UseWorkspaceConnectorsArgs) {
   const loads = useWorkspaceConnectorRuntime({ workspace, handleApiError });
   const handlers = useWorkspaceConnectorHandlers({
@@ -43,29 +51,40 @@ export function useWorkspaceConnectors({
     loads,
     setRepoId,
     loadRepos,
+    onWorkspaceSourcesChanged,
   });
 
-  return { ...loads, ...handlers };
+  function handleConnectConnector(connectorId: ConnectorId) {
+    void startOAuthFlow(buildConnectorStartUrl(connectorId, workspace.workspace_id));
+  }
+
+  return { ...loads, ...handlers, handleConnectConnector };
 }
 
 export type UseWorkspaceConnectorHandlersIntegrationsArgs = {
   workspace: Workspace;
   handleApiError: (error: unknown, setMessage?: (message: string) => void) => void;
   loads: ConnectorLoads;
+  onWorkspaceSourcesChanged?: () => void;
 };
 
 export function useWorkspaceConnectorHandlersIntegrations({
   workspace,
   handleApiError,
   loads,
+  onWorkspaceSourcesChanged,
 }: UseWorkspaceConnectorHandlersIntegrationsArgs) {
-  
+  function notifyWorkspaceSourcesChanged() {
+    onWorkspaceSourcesChanged?.();
+  }
+
   const {
     setConnectorStatus,
     setConnectorError,
-    setJiraConnection,
-    setJiraProjects,
     setJiraLoading,
+    setJiraWorkspaceSite,
+    setJiraProjects,
+    jiraProjectQuery,
     setSlackConnection,
     setSlackChannels,
     setSlackLoading,
@@ -75,26 +94,51 @@ export function useWorkspaceConnectorHandlersIntegrations({
     setConfluenceConnection,
     setConfluenceSpaces,
     setConfluenceLoading,
-    setConnectorMembers,
+    setNotionConnection,
+    setNotionDatabases,
+    setNotionLoading,
     loadJiraSources,
+    loadJiraWorkspaceSite,
+    loadJiraProjects,
     loadSlackSources,
+    loadSlackTeams,
     loadLinearSources,
     loadConfluenceSources,
+    loadNotionSources,
   } = loads;
 
   function handleJiraConnect() {
-    window.location.assign("/api/me/integrations/jira/start");
+    void startOAuthFlow("/api/me/integrations/jira/start");
   }
-  async function handleJiraDisconnect() {
+  async function handleConnectJiraSite(site: JiraSite) {
     setJiraLoading(true);
     setConnectorError(null);
     try {
-      const result = await deleteJson<JiraConnection>(
-        "/api/me/integrations/jira",
+      const result = await postJson<{ cloud_id: string }, WorkspaceJiraSiteStatus>(
+        `/api/workspaces/${workspace.workspace_id}/jira/site`,
+        { cloud_id: site.cloud_id },
       );
-      setJiraConnection(result);
+      setJiraWorkspaceSite(result);
+      setConnectorStatus(`${site.name} connected to this workspace.`);
+      await loadJiraProjects(jiraProjectQuery);
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    } finally {
+      setJiraLoading(false);
+    }
+  }
+  async function handleRemoveJiraSite() {
+    setJiraLoading(true);
+    setConnectorError(null);
+    try {
+      const result = await deleteJson<WorkspaceJiraSiteStatus>(
+        `/api/workspaces/${workspace.workspace_id}/jira/site`,
+      );
+      setJiraWorkspaceSite(result);
       setJiraProjects([]);
-      setConnectorStatus("Jira disconnected.");
+      setConnectorStatus("Jira site removed from this workspace.");
+      await loadJiraSources();
+      notifyWorkspaceSourcesChanged();
     } catch (error) {
       handleApiError(error, setConnectorError);
     } finally {
@@ -111,6 +155,7 @@ export function useWorkspaceConnectorHandlersIntegrations({
       );
       setConnectorStatus(`${project.project_key} added to this workspace.`);
       await loadJiraSources();
+      notifyWorkspaceSourcesChanged();
     } catch (error) {
       handleApiError(error, setConnectorError);
     } finally {
@@ -142,6 +187,7 @@ export function useWorkspaceConnectorHandlersIntegrations({
       );
       setConnectorStatus("Jira source removed.");
       await loadJiraSources();
+      notifyWorkspaceSourcesChanged();
     } catch (error) {
       handleApiError(error, setConnectorError);
     } finally {
@@ -152,9 +198,7 @@ export function useWorkspaceConnectorHandlersIntegrations({
     const params = new URLSearchParams({
       workspace_id: workspace.workspace_id,
     });
-    window.location.assign(
-      `/api/me/integrations/slack/start?${params.toString()}`,
-    );
+    void startOAuthFlow(`/api/me/integrations/slack/start?${params.toString()}`);
   }
   async function handleSlackDisconnect(teamId?: string) {
     setSlackLoading(true);
@@ -169,6 +213,25 @@ export function useWorkspaceConnectorHandlersIntegrations({
       setConnectorStatus(
         teamId ? "Slack workspace removed." : "Slack disconnected.",
       );
+      notifyWorkspaceSourcesChanged();
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    } finally {
+      setSlackLoading(false);
+    }
+  }
+  async function handleSlackUnlinkTeam(teamId: string) {
+    setSlackLoading(true);
+    setConnectorError(null);
+    try {
+      await deleteJson<WorkspaceSlackTeam>(
+        `/api/workspaces/${workspace.workspace_id}/slack/teams/${encodeURIComponent(teamId)}`,
+      );
+      setConnectorStatus("Slack workspace removed from this Readbase workspace.");
+      setSlackChannels([]);
+      await loadSlackTeams();
+      await loadSlackSources();
+      notifyWorkspaceSourcesChanged();
     } catch (error) {
       handleApiError(error, setConnectorError);
     } finally {
@@ -185,6 +248,7 @@ export function useWorkspaceConnectorHandlersIntegrations({
       );
       setConnectorStatus(`#${channel.channel_name} added to this workspace.`);
       await loadSlackSources();
+      notifyWorkspaceSourcesChanged();
     } catch (error) {
       handleApiError(error, setConnectorError);
     } finally {
@@ -216,6 +280,7 @@ export function useWorkspaceConnectorHandlersIntegrations({
       );
       setConnectorStatus("Slack source removed.");
       await loadSlackSources();
+      notifyWorkspaceSourcesChanged();
     } catch (error) {
       handleApiError(error, setConnectorError);
     } finally {
@@ -223,7 +288,7 @@ export function useWorkspaceConnectorHandlersIntegrations({
     }
   }
   function handleLinearConnect() {
-    window.location.assign("/api/me/integrations/linear/start");
+    void startOAuthFlow("/api/me/integrations/linear/start");
   }
   async function handleLinearDisconnect() {
     setLinearLoading(true);
@@ -235,6 +300,7 @@ export function useWorkspaceConnectorHandlersIntegrations({
       setLinearConnection(result);
       setLinearSelectableSources([]);
       setConnectorStatus("Linear disconnected.");
+      notifyWorkspaceSourcesChanged();
     } catch (error) {
       handleApiError(error, setConnectorError);
     } finally {
@@ -253,6 +319,7 @@ export function useWorkspaceConnectorHandlersIntegrations({
         `${source.project_name || source.team_name} added to this workspace.`,
       );
       await loadLinearSources();
+      notifyWorkspaceSourcesChanged();
     } catch (error) {
       handleApiError(error, setConnectorError);
     } finally {
@@ -284,6 +351,7 @@ export function useWorkspaceConnectorHandlersIntegrations({
       );
       setConnectorStatus("Linear source removed.");
       await loadLinearSources();
+      notifyWorkspaceSourcesChanged();
     } catch (error) {
       handleApiError(error, setConnectorError);
     } finally {
@@ -291,7 +359,7 @@ export function useWorkspaceConnectorHandlersIntegrations({
     }
   }
   function handleConfluenceConnect() {
-    window.location.assign("/api/me/integrations/confluence/start");
+    void startOAuthFlow("/api/me/integrations/confluence/start");
   }
   async function handleConfluenceDisconnect() {
     setConfluenceLoading(true);
@@ -303,6 +371,7 @@ export function useWorkspaceConnectorHandlersIntegrations({
       setConfluenceConnection(result);
       setConfluenceSpaces([]);
       setConnectorStatus("Confluence disconnected.");
+      notifyWorkspaceSourcesChanged();
     } catch (error) {
       handleApiError(error, setConnectorError);
     } finally {
@@ -319,6 +388,7 @@ export function useWorkspaceConnectorHandlersIntegrations({
       );
       setConnectorStatus(`${space.space_key} added to this workspace.`);
       await loadConfluenceSources();
+      notifyWorkspaceSourcesChanged();
     } catch (error) {
       handleApiError(error, setConnectorError);
     } finally {
@@ -350,41 +420,92 @@ export function useWorkspaceConnectorHandlersIntegrations({
       );
       setConnectorStatus("Confluence source removed.");
       await loadConfluenceSources();
+      notifyWorkspaceSourcesChanged();
     } catch (error) {
       handleApiError(error, setConnectorError);
     } finally {
       setConfluenceLoading(false);
     }
   }
-  async function handleConnectorManagerToggle(member: WorkspaceMember) {
+  function handleNotionConnect() {
+    void startOAuthFlow("/api/me/integrations/notion/start");
+  }
+  async function handleNotionDisconnect() {
+    setNotionLoading(true);
     setConnectorError(null);
     try {
-      const updated = await patchJson<
-        { connector_manager: boolean },
-        WorkspaceMember
-      >(
-        `/api/workspaces/${workspace.workspace_id}/members/${encodeURIComponent(member.email)}/connector-manager`,
-        { connector_manager: !member.connector_manager },
+      const result = await deleteJson<NotionConnection>(
+        "/api/me/integrations/notion",
       );
-      setConnectorMembers((currentMembers) =>
-        currentMembers.map((currentMember) =>
-          currentMember.email === updated.email ? updated : currentMember,
-        ),
-      );
+      setNotionConnection(result);
+      setNotionDatabases([]);
+      setConnectorStatus("Notion disconnected.");
+      notifyWorkspaceSourcesChanged();
     } catch (error) {
       handleApiError(error, setConnectorError);
+    } finally {
+      setNotionLoading(false);
     }
   }
-
-
+  async function handleAddNotionDatabase(database: NotionDatabase) {
+    setNotionLoading(true);
+    setConnectorError(null);
+    try {
+      await postJson<NotionDatabase, WorkspaceNotionSource>(
+        `/api/workspaces/${workspace.workspace_id}/notion/sources`,
+        database,
+      );
+      setConnectorStatus(`${database.database_title} added to this workspace.`);
+      await loadNotionSources();
+      notifyWorkspaceSourcesChanged();
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    } finally {
+      setNotionLoading(false);
+    }
+  }
+  async function handleSyncNotionSource(sourceId: string) {
+    setNotionLoading(true);
+    setConnectorError(null);
+    try {
+      await postJson<undefined, WorkspaceNotionSource>(
+        `/api/workspaces/${workspace.workspace_id}/notion/sources/${sourceId}/sync`,
+      );
+      setConnectorStatus("Notion source synced.");
+      await loadNotionSources();
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+      await loadNotionSources();
+    } finally {
+      setNotionLoading(false);
+    }
+  }
+  async function handleRemoveNotionSource(sourceId: string) {
+    setNotionLoading(true);
+    setConnectorError(null);
+    try {
+      await deleteJson<WorkspaceNotionSource>(
+        `/api/workspaces/${workspace.workspace_id}/notion/sources/${sourceId}`,
+      );
+      setConnectorStatus("Notion source removed.");
+      await loadNotionSources();
+      notifyWorkspaceSourcesChanged();
+    } catch (error) {
+      handleApiError(error, setConnectorError);
+    } finally {
+      setNotionLoading(false);
+    }
+  }
   return {
     handleJiraConnect,
-    handleJiraDisconnect,
+    handleConnectJiraSite,
+    handleRemoveJiraSite,
     handleAddJiraProject,
     handleSyncJiraSource,
     handleRemoveJiraSource,
     handleSlackConnect,
     handleSlackDisconnect,
+    handleSlackUnlinkTeam,
     handleAddSlackChannel,
     handleSyncSlackSource,
     handleRemoveSlackSource,
@@ -398,6 +519,10 @@ export function useWorkspaceConnectorHandlersIntegrations({
     handleAddConfluenceSpace,
     handleSyncConfluenceSource,
     handleRemoveConfluenceSource,
-    handleConnectorManagerToggle,
+    handleNotionConnect,
+    handleNotionDisconnect,
+    handleAddNotionDatabase,
+    handleSyncNotionSource,
+    handleRemoveNotionSource,
   };
 }

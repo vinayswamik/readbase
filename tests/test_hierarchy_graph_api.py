@@ -23,30 +23,42 @@ class HierarchyGraphApiTests(unittest.TestCase):
         self.original_url = str(database.engine.url)
         database.configure_database(f"sqlite:///{self.data_dir / 'test.db'}")
         database.Base.metadata.drop_all(bind=database.engine)
-        database.init_database(seed_admins=False)
+        database.init_database()
         self.app = FastAPI()
         self.app.include_router(api_router)
         self.client = TestClient(self.app)
-        self.admin = AuthUser("admin-1", "admin@example.com", "Admin", "admin")
-        self.member = AuthUser("member-1", "member@example.com", "Member", "member")
-        self.other_member = AuthUser("member-2", "other@example.com", "Other", "member")
-        self.third_member = AuthUser("member-3", "third@example.com", "Third", "member")
-        self.outsider = AuthUser("outsider", "outsider@example.com", "Outsider", "member")
+        self.owner = AuthUser("owner-1", "owner@example.com", "Owner")
+        self.joined_member = AuthUser("admin-1", "admin@example.com", "Admin")
+        self.member = AuthUser("member-1", "member@example.com", "Member")
+        self.other_member = AuthUser("member-2", "other@example.com", "Other")
+        self.third_member = AuthUser("member-3", "third@example.com", "Third")
+        self.outsider = AuthUser("outsider", "outsider@example.com", "Outsider")
         self.workspace = workspace_service.create_workspace(
-            self.admin.user_id,
+            self.owner.user_id,
             "Demo",
-            owner_email=self.admin.email,
-            owner_name=self.admin.name,
+            owner_email=self.owner.email,
+            owner_name=self.owner.name,
+        )
+        workspace_service.add_workspace_member(
+            self.owner.user_id,
+            self.workspace["workspace_id"],
+            self.joined_member.email,
+        )
+        upsert_authenticated_user(
+            GoogleIdentity(
+                self.joined_member.user_id,
+                self.joined_member.email,
+                self.joined_member.name,
+            )
         )
         for member in (self.member, self.other_member, self.third_member):
             workspace_service.add_workspace_member(
-                self.admin.user_id,
+                self.owner.user_id,
                 self.workspace["workspace_id"],
                 member.email,
             )
             upsert_authenticated_user(
-                GoogleIdentity(member.user_id, member.email, member.name),
-                role=member.role,
+                GoogleIdentity(member.user_id, member.email, member.name)
             )
 
     def tearDown(self):
@@ -56,10 +68,10 @@ class HierarchyGraphApiTests(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_cannot_create_node_without_logged_in_workspace_assignee(self):
-        self._login_as(self.admin)
+        self._login_as(self.owner)
 
         pending = workspace_service.add_workspace_member(
-            self.admin.user_id,
+            self.owner.user_id,
             self.workspace["workspace_id"],
             "pending@example.com",
         )
@@ -82,27 +94,68 @@ class HierarchyGraphApiTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(no_assignee.status_code, 422)
+        self.assertEqual(no_assignee.status_code, 400)
         self.assertEqual(pending_assignee.status_code, 400)
         self.assertEqual(outsider_assignee.status_code, 400)
 
+    def test_email_invite_requires_accept_before_node_is_created(self):
+        self._login_as(self.owner)
+        invite_response = self.client.post(
+            self._graph_url("/nodes"),
+            json={
+                "display_name": "Pending hire",
+                "invitee_email": "pending@example.com",
+                "relation": "Peer",
+                "reason": "Cross-team collaboration",
+                "invitor_designation": "Staff engineer",
+            },
+        )
+        self.assertEqual(invite_response.status_code, 200)
+        invite = invite_response.json()["invite"]
+        self.assertEqual(invite["status"], "pending")
+        self.assertIsNone(invite_response.json()["node"])
+
+        upsert_authenticated_user(
+            GoogleIdentity("pending-1", "pending@example.com", "Pending User")
+        )
+
+        self._login_as(AuthUser("pending-1", "pending@example.com", "Pending User"))
+        graph = self.client.get(self._graph_url(""))
+        self.assertEqual(graph.status_code, 403)
+
+        accept_response = self.client.post(f"/api/invites/{invite['invite_id']}/accept")
+        self.assertEqual(accept_response.status_code, 200)
+        self.assertEqual(accept_response.json()["status"], "active")
+
+        graph = self.client.get(self._graph_url("")).json()
+        pending_nodes = [
+            node
+            for node in graph["nodes"]
+            if node["assigned_user_id"] == "pending-1"
+        ]
+        self.assertEqual(len(pending_nodes), 1)
+        self.assertEqual(pending_nodes[0]["display_name"], "Pending hire")
+
+        invites = self.client.get("/api/invites").json()["received"]
+        self.assertEqual(invites, [])
+
     def test_cannot_assign_user_to_multiple_nodes(self):
-        self._login_as(self.admin)
-        self._create_node("Admin", self.admin.user_id)
+        self._login_as(self.owner)
+        self._create_node("Owner", self.owner.user_id)
 
         duplicate = self.client.post(
             self._graph_url("/nodes"),
             json={
-                "display_name": "Duplicate admin",
-                "assigned_user_id": self.admin.user_id,
+                "display_name": "Duplicate owner",
+                "assigned_user_id": self.owner.user_id,
             },
         )
 
         self.assertEqual(duplicate.status_code, 400)
 
-    def test_admin_can_create_delete_rename_and_reparent_any_node(self):
-        self._login_as(self.admin)
-        root = self._create_node("Admin", self.admin.user_id)
+    def test_owner_can_create_delete_rename_and_reparent_any_node(self):
+        self._login_as(self.owner)
+        root = self._create_node("Owner", self.owner.user_id)
         child = self._create_node("Member", self.member.user_id, root["node"]["node_id"])
         sibling = self._create_node("Other", self.other_member.user_id, root["node"]["node_id"])
 
@@ -135,31 +188,58 @@ class HierarchyGraphApiTests(unittest.TestCase):
         delete = self.client.delete(self._graph_url(f"/nodes/{child['node']['node_id']}"))
         self.assertEqual(delete.status_code, 200)
 
+    def test_non_owner_member_cannot_manage_graph(self):
+        self._login_as(self.owner)
+        root = self._create_node("Owner", self.owner.user_id)
+        self._login_as(self.joined_member)
+
+        create_root = self.client.post(
+            self._graph_url("/nodes"),
+            json={
+                "display_name": "Joined member root",
+                "assigned_user_id": self.joined_member.user_id,
+            },
+        )
+        rename = self.client.patch(
+            self._graph_url(f"/nodes/{root['node']['node_id']}"),
+            json={"display_name": "Renamed by admin"},
+        )
+        connect = self.client.post(
+            self._graph_url("/connections"),
+            json={
+                "parent_node_id": root["node"]["node_id"],
+                "child_node_id": root["node"]["node_id"],
+            },
+        )
+
+        self.assertEqual(create_root.status_code, 403)
+        self.assertEqual(rename.status_code, 403)
+        self.assertEqual(connect.status_code, 403)
+
     def test_graph_visibility_is_scoped_by_user_hierarchy(self):
-        fourth_member = AuthUser("member-4", "fourth@example.com", "Fourth", "member")
-        fifth_member = AuthUser("member-5", "fifth@example.com", "Fifth", "member")
+        fourth_member = AuthUser("member-4", "fourth@example.com", "Fourth")
+        fifth_member = AuthUser("member-5", "fifth@example.com", "Fifth")
         for member in (fourth_member, fifth_member):
             workspace_service.add_workspace_member(
-                self.admin.user_id,
+                self.owner.user_id,
                 self.workspace["workspace_id"],
                 member.email,
             )
             upsert_authenticated_user(
-                GoogleIdentity(member.user_id, member.email, member.name),
-                role=member.role,
+                GoogleIdentity(member.user_id, member.email, member.name)
             )
 
-        self._login_as(self.admin)
-        root = self._create_node("Admin", self.admin.user_id)
+        self._login_as(self.owner)
+        root = self._create_node("Owner", self.owner.user_id)
         member_node = self._create_node("Member", self.member.user_id, root["node"]["node_id"])
         sibling = self._create_node("Sibling", fifth_member.user_id, root["node"]["node_id"])
         child = self._create_node("Child", self.other_member.user_id, member_node["node"]["node_id"])
         grandchild = self._create_node("Grandchild", self.third_member.user_id, child["node"]["node_id"])
         great_grandchild = self._create_node("Great grandchild", fourth_member.user_id, grandchild["node"]["node_id"])
 
-        admin_graph = self.client.get(self._graph_url("")).json()
-        self.assertEqual(len(admin_graph["nodes"]), 6)
-        self.assertEqual(len(admin_graph["connections"]), 5)
+        owner_graph = self.client.get(self._graph_url("")).json()
+        self.assertEqual(len(owner_graph["nodes"]), 6)
+        self.assertEqual(len(owner_graph["connections"]), 5)
 
         self._login_as(self.member)
         member_graph = self.client.get(self._graph_url("")).json()
@@ -188,20 +268,18 @@ class HierarchyGraphApiTests(unittest.TestCase):
             },
         )
 
-    def test_member_without_assigned_node_sees_empty_graph(self):
-        self._login_as(self.admin)
-        self._create_node("Admin", self.admin.user_id)
+    def test_member_without_assigned_node_cannot_access_graph(self):
+        self._login_as(self.owner)
+        self._create_node("Owner", self.owner.user_id)
 
         self._login_as(self.member)
         graph = self.client.get(self._graph_url(""))
 
-        self.assertEqual(graph.status_code, 200)
-        self.assertEqual(graph.json()["nodes"], [])
-        self.assertEqual(graph.json()["connections"], [])
+        self.assertEqual(graph.status_code, 403)
 
     def test_member_can_create_immediate_child_only_under_own_node(self):
-        self._login_as(self.admin)
-        root = self._create_node("Admin", self.admin.user_id)
+        self._login_as(self.owner)
+        root = self._create_node("Owner", self.owner.user_id)
         member_node = self._create_node("Member", self.member.user_id, root["node"]["node_id"])
         self._login_as(self.member)
 
@@ -235,8 +313,8 @@ class HierarchyGraphApiTests(unittest.TestCase):
         self.assertEqual(created.json()["node"]["assigned_user_id"], self.other_member.user_id)
 
     def test_member_without_own_node_cannot_create_child(self):
-        self._login_as(self.admin)
-        root = self._create_node("Admin", self.admin.user_id)
+        self._login_as(self.owner)
+        root = self._create_node("Owner", self.owner.user_id)
         self._login_as(self.member)
 
         response = self.client.post(
@@ -251,8 +329,8 @@ class HierarchyGraphApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_member_delete_rules_are_limited_to_immediate_children(self):
-        self._login_as(self.admin)
-        root = self._create_node("Admin", self.admin.user_id)
+        self._login_as(self.owner)
+        root = self._create_node("Owner", self.owner.user_id)
         member_node = self._create_node("Member", self.member.user_id, root["node"]["node_id"])
         child = self._create_node("Other", self.other_member.user_id, member_node["node"]["node_id"])
         grandchild = self._create_node("Third", self.third_member.user_id, child["node"]["node_id"])
@@ -272,16 +350,32 @@ class HierarchyGraphApiTests(unittest.TestCase):
         self.assertEqual(delete_descendant.status_code, 403)
         self.assertEqual(delete_child_with_children.status_code, 403)
 
-        self._login_as(self.admin)
+        self._login_as(self.owner)
         self.client.delete(self._graph_url(f"/nodes/{grandchild['node']['node_id']}"))
         self._login_as(self.member)
         delete_child = self.client.delete(self._graph_url(f"/nodes/{child['node']['node_id']}"))
 
         self.assertEqual(delete_child.status_code, 200)
 
+    def test_deleting_member_node_removes_workspace_from_their_list(self):
+        self._login_as(self.owner)
+        root = self._create_node("Owner", self.owner.user_id)
+        child = self._create_node("Member", self.member.user_id, root["node"]["node_id"])
+
+        self._login_as(self.member)
+        self.assertEqual(len(self.client.get("/api/workspaces").json()["workspaces"]), 1)
+
+        self._login_as(self.owner)
+        delete = self.client.delete(self._graph_url(f"/nodes/{child['node']['node_id']}"))
+        self.assertEqual(delete.status_code, 200)
+
+        self._login_as(self.member)
+        self.assertEqual(self.client.get("/api/workspaces").json()["workspaces"], [])
+
     def test_any_workspace_user_can_update_node_position(self):
-        self._login_as(self.admin)
-        root = self._create_node("Admin", self.admin.user_id)
+        self._login_as(self.owner)
+        root = self._create_node("Owner", self.owner.user_id)
+        self._create_node("Member", self.member.user_id, root["node"]["node_id"])
         self._login_as(self.member)
 
         response = self.client.patch(
@@ -294,8 +388,8 @@ class HierarchyGraphApiTests(unittest.TestCase):
         self.assertEqual(response.json()["y"], 320)
 
     def test_member_cannot_rename_reassign_or_reparent_nodes(self):
-        self._login_as(self.admin)
-        root = self._create_node("Admin", self.admin.user_id)
+        self._login_as(self.owner)
+        root = self._create_node("Owner", self.owner.user_id)
         member_node = self._create_node("Member", self.member.user_id, root["node"]["node_id"])
         child = self._create_node("Other", self.other_member.user_id, member_node["node"]["node_id"])
         self._login_as(self.member)
@@ -318,8 +412,8 @@ class HierarchyGraphApiTests(unittest.TestCase):
         self.assertEqual(reparent.status_code, 403)
 
     def test_single_parent_and_cycle_protections_still_apply(self):
-        self._login_as(self.admin)
-        root = self._create_node("Admin", self.admin.user_id)
+        self._login_as(self.owner)
+        root = self._create_node("Owner", self.owner.user_id)
         child = self._create_node("Member", self.member.user_id, root["node"]["node_id"])
         grandchild = self._create_node("Other", self.other_member.user_id, child["node"]["node_id"])
 

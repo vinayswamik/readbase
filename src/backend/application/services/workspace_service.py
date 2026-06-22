@@ -20,10 +20,18 @@ from src.backend.application.services.workspace_connector_permissions import (
     update_workspace_member_connector_manager,
     user_can_manage_workspace_connectors,
 )
-from src.backend.config.settings import CLI_STATE_FILE, DATA_DIR, WORKSPACES_DIR
+from src.backend.config.settings import CLI_STATE_FILE, DATA_DIR
+from src.backend.infrastructure.storage.resolver import resolve_storage_context
 from src.backend.infrastructure.database import session_scope
 from src.backend.infrastructure.ingestion.repo_manager import list_indexes
-from src.backend.infrastructure.models import User, Workspace, WorkspaceMember
+from src.backend.infrastructure.models import (
+    HierarchyConnection,
+    HierarchyNode,
+    User,
+    Workspace,
+    WorkspaceInvite,
+    WorkspaceMember,
+)
 from src.backend.infrastructure.retrieval.retriever import delete_index
 
 CLI_OWNER_ID = "local-cli"
@@ -32,7 +40,6 @@ CLI_OWNER_ID = "local-cli"
 def list_workspaces(
     user_id: str,
     user_email: str | None = None,
-    user_role: str = "member",
 ) -> list[dict]:
     email_key = _email_key_for_user(user_id, user_email)
     with session_scope() as session:
@@ -51,9 +58,26 @@ def list_workspaces(
             .unique()
             .all()
         )
-        return [
-            public_workspace(workspace, actor_user_id=user_id, actor_role=user_role)
+        joined_workspace_ids = {
+            workspace.workspace_id
             for workspace in workspaces
+            if workspace.owner_user_id != user_id
+        }
+        workspace_ids_with_nodes: set[str] = set()
+        if joined_workspace_ids:
+            workspace_ids_with_nodes = set(
+                session.scalars(
+                    select(HierarchyNode.workspace_id).where(
+                        HierarchyNode.assigned_user_id == user_id,
+                        HierarchyNode.workspace_id.in_(joined_workspace_ids),
+                    )
+                ).all()
+            )
+        return [
+            public_workspace(workspace, actor_user_id=user_id)
+            for workspace in workspaces
+            if workspace.owner_user_id == user_id
+            or workspace.workspace_id in workspace_ids_with_nodes
         ]
 
 
@@ -96,9 +120,9 @@ def create_workspace(
                 added_by_user_id=owner_id,
             )
         )
-        public = public_workspace(workspace, actor_user_id=owner_id, actor_role="admin")
+        public = public_workspace(workspace, actor_user_id=owner_id)
 
-    workspace_root(public["workspace_id"]).mkdir(parents=True, exist_ok=True)
+    resolve_storage_context(public["workspace_id"])
     return public
 
 
@@ -106,7 +130,6 @@ def get_workspace(
     user_id: str,
     workspace_id: str,
     user_email: str | None = None,
-    user_role: str = "member",
 ) -> dict:
     normalized_id = workspace_id.strip()
     if not normalized_id:
@@ -127,7 +150,11 @@ def get_workspace(
         )
         if workspace is None:
             raise ResourceNotFoundError("Workspace not found.")
-        return public_workspace(workspace, actor_user_id=user_id, actor_role=user_role)
+        if workspace.owner_user_id != user_id and not _user_has_assigned_node(
+            session, workspace.workspace_id, user_id
+        ):
+            raise ResourceNotFoundError("Workspace not found.")
+        return public_workspace(workspace, actor_user_id=user_id)
 
 
 def get_owned_workspace(owner_id: str, workspace_id: str) -> dict:
@@ -138,7 +165,6 @@ def resolve_workspace(
     user_id: str,
     name_or_id: str,
     user_email: str | None = None,
-    user_role: str = "member",
 ) -> dict:
     normalized_value = name_or_id.strip()
     if not normalized_value:
@@ -163,17 +189,16 @@ def resolve_workspace(
         )
         if workspace is None:
             raise ResourceNotFoundError("Workspace not found.")
-        return public_workspace(workspace, actor_user_id=user_id, actor_role=user_role)
+        if workspace.owner_user_id != user_id and not _user_has_assigned_node(
+            session, workspace.workspace_id, user_id
+        ):
+            raise ResourceNotFoundError("Workspace not found.")
+        return public_workspace(workspace, actor_user_id=user_id)
 
 
 def delete_workspace(owner_id: str, workspace_id: str) -> dict:
     target = _get_owned_workspace(owner_id, workspace_id)
-
-    with session_scope() as session:
-        workspace = session.get(Workspace, target["workspace_id"])
-        if workspace is None:
-            raise ResourceNotFoundError("Workspace not found.")
-        session.delete(workspace)
+    storage = resolve_storage_context(target["workspace_id"])
 
     cleanup_errors: list[str] = []
     for repo in list_indexes(workspace_id=target["workspace_id"]):
@@ -181,12 +206,17 @@ def delete_workspace(owner_id: str, workspace_id: str) -> dict:
         if repo_id:
             delete_index(repo_id, workspace_id=target["workspace_id"])
 
-    root = workspace_root(target["workspace_id"])
-    if root.exists():
-        try:
-            shutil.rmtree(root)
-        except OSError as exc:
-            cleanup_errors.append(str(exc))
+    with session_scope() as session:
+        workspace = session.get(Workspace, target["workspace_id"])
+        if workspace is None:
+            raise ResourceNotFoundError("Workspace not found.")
+        session.delete(workspace)
+    for root in storage.cleanup_roots():
+        if root.exists():
+            try:
+                shutil.rmtree(root)
+            except OSError as exc:
+                cleanup_errors.append(str(exc))
 
     if owner_id == CLI_OWNER_ID and read_active_workspace_id() == target["workspace_id"]:
         set_active_workspace_id(None)
@@ -250,31 +280,100 @@ def remove_workspace_member(owner_id: str, workspace_id: str, email: str) -> dic
         return public
 
 
-def user_can_access_workspace(user_id: str, user_email: str, workspace_id: str) -> bool:
-    email_key = normalize_email_key(user_email)
+def leave_workspace(user_id: str, workspace_id: str, user_email: str | None = None) -> dict:
+    from src.backend.application.services.hierarchy_graph_service import (
+        _revoke_member_access_without_node,
+    )
+
+    normalized_id = workspace_id.strip()
+    if not normalized_id:
+        raise ResourceNotFoundError("Workspace not found.")
+    email_key = _email_key_for_user(user_id, user_email)
+
     with session_scope() as session:
-        membership = session.scalar(
+        workspace = session.get(Workspace, normalized_id)
+        if workspace is None:
+            raise ResourceNotFoundError("Workspace not found.")
+        if workspace.owner_user_id == user_id:
+            raise ValidationError(
+                "Workspace owners cannot leave their own workspace. Delete it instead."
+            )
+
+        member = session.scalar(
             select(WorkspaceMember).where(
-                WorkspaceMember.workspace_id == workspace_id.strip(),
+                WorkspaceMember.workspace_id == normalized_id,
                 or_(
                     WorkspaceMember.user_id == user_id,
                     WorkspaceMember.member_email_key == email_key,
                 ),
             )
         )
-        return membership is not None
+        if member is None:
+            raise ResourceNotFoundError("Workspace not found.")
+
+        public = public_workspace(workspace, actor_user_id=user_id)
+        node = session.scalar(
+            select(HierarchyNode).where(
+                HierarchyNode.workspace_id == normalized_id,
+                HierarchyNode.assigned_user_id == user_id,
+            )
+        )
+        if node is not None:
+            has_children = session.scalar(
+                select(HierarchyConnection.connection_id).where(
+                    HierarchyConnection.workspace_id == normalized_id,
+                    HierarchyConnection.parent_node_id == node.node_id,
+                )
+            )
+            if has_children is not None:
+                raise ValidationError(
+                    "You still have people beneath you on the org graph. "
+                    "Ask the workspace owner to reassign them before you leave."
+                )
+            for connection in session.scalars(
+                select(HierarchyConnection).where(
+                    HierarchyConnection.workspace_id == normalized_id,
+                    or_(
+                        HierarchyConnection.parent_node_id == node.node_id,
+                        HierarchyConnection.child_node_id == node.node_id,
+                    ),
+                )
+            ).all():
+                session.delete(connection)
+            session.delete(node)
+            _revoke_member_access_without_node(session, normalized_id, user_id)
+            return public
+
+        for invite in session.scalars(
+            select(WorkspaceInvite).where(
+                WorkspaceInvite.workspace_id == normalized_id,
+                WorkspaceInvite.invitee_user_id == user_id,
+                WorkspaceInvite.status == "pending",
+            )
+        ).all():
+            session.delete(invite)
+        session.delete(member)
+        return public
+
+
+def user_can_access_workspace(user_id: str, user_email: str, workspace_id: str) -> bool:
+    try:
+        get_workspace(user_id, workspace_id.strip(), user_email=user_email)
+        return True
+    except ResourceNotFoundError:
+        return False
 
 
 def workspace_root(workspace_id: str) -> Path:
-    return WORKSPACES_DIR / workspace_id
+    return resolve_storage_context(workspace_id).workspace_root
 
 
 def workspace_repos_dir(workspace_id: str) -> Path:
-    return workspace_root(workspace_id) / "repos"
+    return resolve_storage_context(workspace_id).repos_dir
 
 
 def workspace_indexes_dir(workspace_id: str) -> Path:
-    return workspace_root(workspace_id) / "indexes"
+    return resolve_storage_context(workspace_id).indexes_dir
 
 
 def read_active_workspace_id() -> str | None:
@@ -308,14 +407,13 @@ def get_active_workspace() -> dict:
 def public_workspace(
     workspace: Workspace,
     actor_user_id: str | None = None,
-    actor_role: str = "member",
 ) -> dict:
     return {
         "workspace_id": str(workspace.workspace_id),
         "owner_user_id": str(workspace.owner_user_id),
         "name": str(workspace.name),
         "created_at": _format_datetime(workspace.created_at),
-        "can_manage": bool(actor_role == "admin" and actor_user_id == workspace.owner_user_id),
+        "can_manage": bool(actor_user_id and actor_user_id == workspace.owner_user_id),
     }
 
 
@@ -345,7 +443,7 @@ def _get_owned_workspace(owner_id: str, workspace_id: str) -> dict:
             raise ResourceNotFoundError("Workspace not found.")
         if workspace.owner_user_id != owner_id:
             raise PermissionDeniedError("Workspace owner access required.")
-        return public_workspace(workspace, actor_user_id=owner_id, actor_role="admin")
+        return public_workspace(workspace, actor_user_id=owner_id)
 
 
 def _ensure_user(session, user_id: str, email: str, name: str) -> User:
@@ -372,6 +470,18 @@ def _public_member(member: WorkspaceMember, owner_id: str) -> dict:
         "is_owner": is_owner,
         "connector_manager": bool(is_owner or member.connector_manager),
     }
+
+
+def _user_has_assigned_node(session, workspace_id: str, user_id: str) -> bool:
+    return (
+        session.scalar(
+            select(HierarchyNode.node_id).where(
+                HierarchyNode.workspace_id == workspace_id,
+                HierarchyNode.assigned_user_id == user_id,
+            )
+        )
+        is not None
+    )
 
 
 def _email_for_user(user_id: str, user_email: str | None) -> str:

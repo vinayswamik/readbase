@@ -1,7 +1,5 @@
 import type { ReactNode } from "react";
 
-import type { WorkspaceMember } from "../../../types";
-
 export function KnowledgeConnectorBody({
   connectorName,
   connected,
@@ -16,9 +14,6 @@ export function KnowledgeConnectorBody({
   emptyAvailableText,
   workspaceTitle,
   emptyWorkspaceText,
-  members,
-  loadingMembers,
-  canManageWorkspace,
   error,
   status,
   availableRows,
@@ -27,7 +22,6 @@ export function KnowledgeConnectorBody({
   onDisconnect,
   onQueryChange,
   onSearch,
-  onConnectorManagerToggle,
   onClose,
 }: {
   connectorName: string;
@@ -43,9 +37,6 @@ export function KnowledgeConnectorBody({
   emptyAvailableText: string;
   workspaceTitle: string;
   emptyWorkspaceText: string;
-  members: WorkspaceMember[];
-  loadingMembers: boolean;
-  canManageWorkspace: boolean;
   error: string | null;
   status: string;
   availableRows: ReactNode[];
@@ -54,7 +45,6 @@ export function KnowledgeConnectorBody({
   onDisconnect: () => void;
   onQueryChange: (query: string) => void;
   onSearch: () => void;
-  onConnectorManagerToggle: (member: WorkspaceMember) => void;
   onClose: () => void;
 }) {
   return (
@@ -64,14 +54,18 @@ export function KnowledgeConnectorBody({
           <strong>{connected ? accountTitle : `${connectorName} account`}</strong>
           <span>{connected ? accountDetail : configured ? disconnectedDetail : `${connectorName} OAuth is not configured on the backend.`}</span>
         </div>
-        <button
-          type="button"
-          className={connected ? "secondary-action-button" : "primary-button"}
-          disabled={loading || !configured}
-          onClick={connected ? onDisconnect : onConnect}
-        >
-          {connected ? "Disconnect" : `Connect ${connectorName}`}
-        </button>
+        {connected ? (
+          <span className="connector-account-status">Connected</span>
+        ) : (
+          <button
+            type="button"
+            className="primary-button"
+            disabled={loading || !configured}
+            onClick={onConnect}
+          >
+            {`Connect ${connectorName}`}
+          </button>
+        )}
       </div>
 
       {connected ? (
@@ -89,36 +83,12 @@ export function KnowledgeConnectorBody({
             {availableRows}
           </section>
           <section className="connector-access-list">
-            <h3>Connector managers</h3>
-            {loadingMembers ? <div className="status-text compact">Loading workspace users...</div> : null}
-            {members.map((member) => (
-              <label className="connector-access-row" key={member.email}>
-                <input
-                  type="checkbox"
-                  checked={member.connector_manager}
-                  disabled={!canManageWorkspace || member.is_owner}
-                  onChange={() => onConnectorManagerToggle(member)}
-                />
-                <span>{member.email}</span>
-                <strong>{member.is_owner ? "Owner" : member.connector_manager ? "Manager" : "Member"}</strong>
-              </label>
-            ))}
-          </section>
-          <section className="connector-access-list">
             <h3>{workspaceTitle}</h3>
             {!workspaceRows.length ? <div className="status-text compact">{emptyWorkspaceText}</div> : null}
             {workspaceRows}
           </section>
         </>
       ) : null}
-
-      {error ? <div className="status-text error-text">{error}</div> : null}
-      {status ? <div className="status-text">{status}</div> : null}
-      <div className="connector-modal-actions">
-        <button type="button" className="primary-button" onClick={onClose}>
-          Done
-        </button>
-      </div>
     </div>
   );
 }

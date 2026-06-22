@@ -10,8 +10,6 @@ import type {
   Workspace,
 } from "../../../types";
 import type { BoardSize, EdgeSegment, Viewport } from "../../WorkspaceGraphCanvas";
-import type { SidebarTab } from "../../WorkspaceLeftPanel";
-
 export const NODE_WIDTH = 168;
 export const NODE_HEIGHT = 76;
 const GRAPH_VIEW_BUFFER = 360;
@@ -178,8 +176,6 @@ export function useWorkspaceGraphModel({
   user,
   handleApiError,
 }: UseWorkspaceGraphModelArgs) {
-  const [panelOpen, setPanelOpen] = useState(true);
-  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("graph");
   const [nodes, setNodes] = useState<HierarchyNode[]>([]);
   const [connections, setConnections] = useState<HierarchyConnection[]>([]);
   const [graphStatus, setGraphStatus] = useState("");
@@ -221,7 +217,8 @@ export function useWorkspaceGraphModel({
     }
     return lookup;
   }, [graphNodes]);
-  const canManageSelectedNode = Boolean(selectedNode && user.role === "admin");
+  const canManageWorkspace = workspace.can_manage;
+  const canManageSelectedNode = Boolean(selectedNode && canManageWorkspace);
   const assignedUserIds = useMemo(
     () => new Set(nodes.map((node) => node.assigned_user_id)),
     [nodes],
@@ -250,8 +247,8 @@ export function useWorkspaceGraphModel({
     return Array.from(options.values());
   }, [assignableUsers, assignedUserIds, selectedNode?.assigned_user_id]);
   const parentOptions = useMemo(
-    () => (user.role === "admin" ? nodes : ownNode ? [ownNode] : []),
-    [nodes, ownNode, user.role],
+    () => (canManageWorkspace ? nodes : ownNode ? [ownNode] : []),
+    [canManageWorkspace, nodes, ownNode],
   );
   const reparentOptions = useMemo(
     () =>
@@ -268,7 +265,7 @@ export function useWorkspaceGraphModel({
   );
   const canDeleteSelectedNode = Boolean(
     selectedNode &&
-    (user.role === "admin" ||
+    (canManageWorkspace ||
       (ownNode &&
         selectedNode.assigned_user_id !== user.id &&
         !selectedNodeHasChildren &&
@@ -362,7 +359,7 @@ export function useWorkspaceGraphModel({
     const resizeObserver = new ResizeObserver(updateBoardSize);
     resizeObserver.observe(board);
     return () => resizeObserver.disconnect();
-  }, [graphRevision, panelOpen]);
+  }, [graphRevision]);
 
 
 
@@ -370,10 +367,6 @@ export function useWorkspaceGraphModel({
     workspace,
     user,
     handleApiError,
-    panelOpen,
-    setPanelOpen,
-    sidebarTab,
-    setSidebarTab,
     nodes,
     setNodes,
     connections,
@@ -403,6 +396,7 @@ export function useWorkspaceGraphModel({
     selectedNode,
     graphNodes,
     graphNodeById,
+    canManageWorkspace,
     canManageSelectedNode,
     assignedUserIds,
     ownNode,

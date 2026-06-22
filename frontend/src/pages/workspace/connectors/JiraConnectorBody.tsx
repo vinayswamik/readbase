@@ -1,138 +1,158 @@
+import { useMemo } from "react";
+
 import type { ConnectorSetupModalProps } from "./ConnectorSetupModalTypes";
+import type { JiraProject } from "../../../types";
+
+type ProjectRow = JiraProject & {
+  sourceId?: string;
+  connected: boolean;
+};
 
 export function JiraConnectorBody({
   jiraConnection,
+  jiraWorkspaceSite,
   jiraSources,
   jiraProjects,
   jiraProjectQuery,
   jiraLoading,
-  members,
-  loadingMembers,
-  canManageWorkspace,
-  error,
-  status,
   onJiraConnect,
-  onJiraDisconnect,
+  onConnectJiraSite,
+  onRemoveJiraSite,
   onJiraProjectQueryChange,
   onJiraProjectSearch,
   onAddJiraProject,
-  onSyncJiraSource,
   onRemoveJiraSource,
-  onConnectorManagerToggle,
-  onClose,
 }: ConnectorSetupModalProps) {
-  return (<div className="connector-modal-body">
-            <div className="connector-account-row">
-              <div>
-                <strong>{jiraConnection?.connected ? jiraConnection.account_name || "Jira connected" : "Jira account"}</strong>
-                <span>
-                  {jiraConnection?.connected
-                    ? jiraConnection.account_email || `${jiraConnection.sites.length} site${jiraConnection.sites.length === 1 ? "" : "s"} connected`
-                    : "Connect your Atlassian account before adding workspace projects."}
-                </span>
-              </div>
-              {jiraConnection?.connected ? (
-                <button type="button" className="secondary-action-button" disabled={jiraLoading} onClick={onJiraDisconnect}>
-                  Disconnect
-                </button>
-              ) : (
-                <button type="button" className="primary-button" disabled={jiraLoading} onClick={onJiraConnect}>
-                  Connect Jira
-                </button>
-              )}
+  const workspaceSiteConnected = Boolean(jiraWorkspaceSite?.connected && jiraWorkspaceSite.site);
+  const availableSites = jiraConnection?.sites || [];
+
+  const projectRows = useMemo(() => {
+    const connectedKeys = new Set(
+      jiraSources.map((source) => `${source.cloud_id}:${source.project_id}`),
+    );
+    const rows: ProjectRow[] = jiraSources.map((source) => ({
+      cloud_id: source.cloud_id,
+      site_name: source.site_name,
+      site_url: source.site_url,
+      project_id: source.project_id,
+      project_key: source.project_key,
+      project_name: source.project_name,
+      sourceId: source.source_id,
+      connected: true,
+    }));
+    for (const project of jiraProjects) {
+      const key = `${project.cloud_id}:${project.project_id}`;
+      if (!connectedKeys.has(key)) {
+        rows.push({ ...project, connected: false });
+      }
+    }
+    return rows;
+  }, [jiraProjects, jiraSources]);
+
+  return (
+    <div className="connector-modal-body">
+      {!jiraConnection?.connected ? (
+        <div className="connector-account-row">
+          <div>
+            <strong>Jira account</strong>
+            <span>Connect your Atlassian account on the home page before linking a site.</span>
+          </div>
+          <button type="button" className="primary-button" disabled={jiraLoading} onClick={onJiraConnect}>
+            Connect Jira
+          </button>
+        </div>
+      ) : null}
+
+      {jiraConnection?.connected && !workspaceSiteConnected ? (
+        <section className="connector-access-list">
+          <h3>Connect a site</h3>
+          {!availableSites.length ? (
+            <div className="status-text compact">No Jira sites available on your account.</div>
+          ) : null}
+          {availableSites.map((site) => (
+            <div className="connector-access-row" key={site.cloud_id}>
+              <span>{site.name}</span>
+              <strong>{site.url.replace(/^https?:\/\//, "")}</strong>
+              <button
+                type="button"
+                className="primary-button compact-button"
+                disabled={jiraLoading}
+                onClick={() => onConnectJiraSite(site)}
+              >
+                Connect site
+              </button>
             </div>
+          ))}
+        </section>
+      ) : null}
 
-            {jiraConnection?.connected ? (
-              <>
-                <div className="connector-search-row">
-                  <input
-                    value={jiraProjectQuery}
-                    placeholder="Search Jira projects"
-                    onChange={(event) => onJiraProjectQueryChange(event.target.value)}
-                  />
-                  <button type="button" className="secondary-action-button" disabled={jiraLoading} onClick={onJiraProjectSearch}>
-                    Search
-                  </button>
-                </div>
+      {jiraConnection?.connected && workspaceSiteConnected && jiraWorkspaceSite?.site ? (
+        <>
+          <div className="connector-account-row">
+            <div>
+              <strong>{jiraWorkspaceSite.site.name}</strong>
+              <span>{jiraWorkspaceSite.site.url.replace(/^https?:\/\//, "")}</span>
+            </div>
+            <button
+              type="button"
+              className="danger-button compact-button"
+              disabled={jiraLoading}
+              onClick={onRemoveJiraSite}
+            >
+              Remove site
+            </button>
+          </div>
 
-                <section className="connector-access-list">
-                  <h3>Available projects</h3>
-                  {jiraLoading && !jiraProjects.length ? <div className="status-text compact">Loading Jira projects...</div> : null}
-                  {!jiraLoading && !jiraProjects.length ? <div className="status-text compact">No visible Jira projects found.</div> : null}
-                  {jiraProjects.slice(0, 8).map((project) => {
-                    const alreadyAdded = jiraSources.some(
-                      (source) => source.cloud_id === project.cloud_id && source.project_id === project.project_id,
-                    );
-                    return (
-                      <div className="connector-access-row" key={`${project.cloud_id}:${project.project_id}`}>
-                        <span>{project.project_key} · {project.project_name}</span>
-                        <strong>{project.site_name}</strong>
-                        <button
-                          type="button"
-                          className="secondary-action-button compact-button"
-                          disabled={jiraLoading || alreadyAdded}
-                          onClick={() => onAddJiraProject(project)}
-                        >
-                          {alreadyAdded ? "Added" : "Add"}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </section>
+          <div className="connector-search-row">
+            <input
+              value={jiraProjectQuery}
+              placeholder="Search Jira projects"
+              onChange={(event) => onJiraProjectQueryChange(event.target.value)}
+            />
+            <button type="button" className="secondary-action-button" disabled={jiraLoading} onClick={onJiraProjectSearch}>
+              Search
+            </button>
+          </div>
 
-                <section className="connector-access-list">
-                  <h3>Connector managers</h3>
-                  {loadingMembers ? <div className="status-text compact">Loading workspace users...</div> : null}
-                  {members.map((member) => (
-                    <label className="connector-access-row" key={member.email}>
-                      <input
-                        type="checkbox"
-                        checked={member.connector_manager}
-                        disabled={!canManageWorkspace || member.is_owner}
-                        onChange={() => onConnectorManagerToggle(member)}
-                      />
-                      <span>{member.email}</span>
-                      <strong>{member.is_owner ? "Owner" : member.connector_manager ? "Manager" : "Member"}</strong>
-                    </label>
-                  ))}
-                </section>
-
-                <section className="connector-access-list">
-                  <h3>Workspace Jira sources</h3>
-                  {!jiraSources.length ? <div className="status-text compact">No Jira projects connected to this workspace.</div> : null}
-                  {jiraSources.map((source) => (
-                    <div className="connector-access-row" key={source.source_id}>
-                      <span>{source.project_key} · {source.project_name}</span>
-                      <strong>{source.sync_status}</strong>
-                      <button
-                        type="button"
-                        className="secondary-action-button compact-button"
-                        disabled={jiraLoading}
-                        onClick={() => onSyncJiraSource(source.source_id)}
-                      >
-                        Sync
-                      </button>
+          <section className="connector-access-list">
+            <h3>Available projects</h3>
+            {jiraLoading && !projectRows.length ? (
+              <div className="status-text compact">Loading Jira projects...</div>
+            ) : null}
+            {!jiraLoading && !projectRows.length ? (
+              <div className="status-text compact">No visible Jira projects found.</div>
+            ) : null}
+            {projectRows.length ? (
+              <div className="jira-project-list-scroll">
+                {projectRows.map((project) => (
+                  <div className="connector-access-row" key={`${project.cloud_id}:${project.project_id}`}>
+                    <span>{project.project_key} · {project.project_name}</span>
+                    {project.connected && project.sourceId ? (
                       <button
                         type="button"
                         className="danger-button compact-button"
                         disabled={jiraLoading}
-                        onClick={() => onRemoveJiraSource(source.source_id)}
+                        onClick={() => onRemoveJiraSource(project.sourceId!)}
                       >
                         Remove
                       </button>
-                    </div>
-                  ))}
-                </section>
-              </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="secondary-action-button compact-button"
+                        disabled={jiraLoading}
+                        onClick={() => onAddJiraProject(project)}
+                      >
+                        Add
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
             ) : null}
-
-            {error ? <div className="status-text error-text">{error}</div> : null}
-            {status ? <div className="status-text">{status}</div> : null}
-            <div className="connector-modal-actions">
-              <button type="button" className="primary-button" onClick={onClose}>
-                Done
-              </button>
-            </div>
-          </div>
+          </section>
+        </>
+      ) : null}
+    </div>
   );
 }

@@ -11,7 +11,7 @@ Readbase is a small codebase Q&A prototype. Paste a GitHub repository URL, let t
 - ChromaDB-backed local retrieval stored in `.readbase/chroma`
 - Optional LLM synthesis via `ANTHROPIC_API_KEY` and `ANTHROPIC_MODEL`
 - React + TypeScript browser UI for indexing a repo and asking questions
-- Admin/member login with database-backed workspace membership
+- Organization OIDC sign-in with opaque server-side sessions
 - Workspace dashboard with per-workspace repository indexes
 - Clear UI -> API routes -> backend services -> storage/provider boundaries
 
@@ -106,20 +106,37 @@ readbase ask
 - Optional: use `--workspace <name-or-id>` with `readbase index` or `readbase ask`.
 - Delete a workspace with a warning prompt: `readbase space "My Workspace" -del`.
 
-## Admin and Member Login
+## API types (TypeScript)
 
-The browser app has separate Admin Login and Member Login buttons. Both use Google OAuth.
+The frontend keeps **hand-written UI types** (`ChatMessage`, etc.) and derives **API contract types** from the FastAPI OpenAPI schema so they stay aligned with backend changes.
 
-- Admin Login succeeds only when the Google account email is approved in the database.
-- Bootstrap approved admins with `READBASE_BOOTSTRAP_ADMIN_EMAILS`.
-- Member Login always creates a member session, even for an approved admin email.
-- Workspace creator admins can add members by email from the workspace dashboard.
+```bash
+python3 scripts/generate_api_types.py
+# or from frontend/
+npm run generate:api-types
+```
+
+This writes:
+
+- `openapi.json` — exported from FastAPI route schemas
+- `frontend/src/api/generated.ts` — auto-generated (do not edit)
+- `frontend/src/api/contract.ts` — stable frontend names over generated schemas
+- `frontend/src/types.ts` — re-exports contract types for the rest of the app
+
+Regenerate after changing `src/backend/api/schemas.py` or route `response_model`s.
+
+## Login and Workspaces
+
+The browser app uses **organization OIDC** sign-in (`Sign in with your organization`). For local dev, configure Google as the OIDC provider. After signing in, every user can:
+
+- Create a workspace (the creator becomes the workspace owner and can manage members, connectors, and deletion).
+- Join a workspace with an invite code shared by the workspace owner.
+- Workspace owners can also add members by email and copy the invite code from the Members panel.
 
 Create a PostgreSQL database and set:
 
 ```bash
 DATABASE_URL=postgresql+psycopg://readbase:readbase@127.0.0.1:5432/readbase
-READBASE_BOOTSTRAP_ADMIN_EMAILS=you@example.com
 ```
 
 Run migrations with:
@@ -153,7 +170,6 @@ ANTHROPIC_API_KEY=your_api_key
 ANTHROPIC_MODEL=your_model_name
 READBASE_DATA_DIR=.readbase
 DATABASE_URL=postgresql+psycopg://readbase:readbase@127.0.0.1:5432/readbase
-READBASE_BOOTSTRAP_ADMIN_EMAILS=you@example.com
 ```
 
 If either Anthropic value is missing, the app still works in retrieval-only mode and returns the most relevant snippets with citations.
