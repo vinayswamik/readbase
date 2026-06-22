@@ -3,7 +3,11 @@ import { useCallback, useEffect, useState } from "react";
 import { isMockApi } from "./dev";
 import { pushMockRoute, readMockRoute, replaceMockRoute, type MockRoute } from "./navigation";
 
-export function useMockRoute(): [MockRoute, (route: MockRoute) => void] {
+export function useMockRoute(): [
+  MockRoute,
+  (route: MockRoute) => void,
+  (route: MockRoute) => void,
+] {
   const [route, setRoute] = useState<MockRoute>(() => readMockRoute());
 
   useEffect(() => {
@@ -34,5 +38,13 @@ export function useMockRoute(): [MockRoute, (route: MockRoute) => void] {
     setRoute(nextRoute);
   }, []);
 
-  return [route, navigate];
+  const replaceNavigate = useCallback((nextRoute: MockRoute) => {
+    if (!isMockApi()) {
+      return;
+    }
+    replaceMockRoute(nextRoute);
+    setRoute(nextRoute);
+  }, []);
+
+  return [route, navigate, replaceNavigate];
 }

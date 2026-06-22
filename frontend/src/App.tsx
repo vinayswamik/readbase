@@ -16,11 +16,18 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const userRef = useRef<AuthUser | null>(null);
   const mockMode = isMockApi();
-  const [mockRoute, navigateMock] = useMockRoute();
+  const [mockRoute, navigateMock, replaceMockRoute] = useMockRoute();
 
   useEffect(() => {
     userRef.current = user;
   }, [user]);
+
+  useEffect(() => {
+    if (!mockMode || isLoadingSession || user || mockRoute.screen === "login") {
+      return;
+    }
+    replaceMockRoute({ screen: "login" });
+  }, [mockMode, isLoadingSession, user, mockRoute.screen, replaceMockRoute]);
 
   useEffect(() => {
     void loadSession();
@@ -138,10 +145,6 @@ export function App() {
     return null;
   }
 
-  if (mockMode && mockRoute.screen === "login") {
-    return <LoginPage loading={isSubmitting} error={error} onLogin={handleLogin} />;
-  }
-
   if (user) {
     return (
       <HomePage
@@ -153,10 +156,6 @@ export function App() {
         onMockNavigate={mockMode ? navigateMock : undefined}
       />
     );
-  }
-
-  if (mockMode && !isLoadingSession && mockRoute.screen !== "login") {
-    return <LoginPage loading={isSubmitting} error={error} onLogin={handleLogin} />;
   }
 
   return <LoginPage loading={isSubmitting} error={error} onLogin={handleLogin} />;
