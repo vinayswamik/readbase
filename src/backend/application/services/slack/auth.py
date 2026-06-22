@@ -3,15 +3,23 @@ from __future__ import annotations
 import os
 import urllib.parse
 from datetime import timedelta
-from secrets import token_urlsafe
 
 from sqlalchemy import delete, select
+
+from src.backend.application.services.connectors.oauth_core import create_connector_oauth_start, pkce_challenge
 
 from src.backend.application.services.auth_service import APP_BASE_URL
 from src.backend.application.services.exceptions import PermissionDeniedError, ValidationError
 from src.backend.application.services.jira.crypto import decrypt_token, encrypt_token
 from src.backend.infrastructure.database import session_scope
-from src.backend.infrastructure.models import SlackUserConnection, SlackVisibilityCache, utc_now
+from src.backend.infrastructure.models import (
+    SlackIndexedItem,
+    SlackUserConnection,
+    SlackVisibilityCache,
+    WorkspaceSlackAccessCache,
+    WorkspaceSlackSource,
+    utc_now,
+)
 
 from .constants import SLACK_AUTHORIZE_URL, SLACK_CALLBACK_PATH, SLACK_OAUTH_STATE_TTL_SECONDS, SLACK_USER_SCOPES
 from .http import is_slack_configured, slack_api_request, slack_client_id, slack_client_secret, slack_oauth_request
@@ -19,8 +27,12 @@ from .serializers import public_connection, public_team
 from .utils import as_utc, optional_str
 
 
+def create_slack_oauth_start():
+    return create_connector_oauth_start(supports_pkce=True)
+
+
 def create_slack_oauth_state() -> str:
-    return token_urlsafe(24)
+    return create_slack_oauth_start().state
 
 
 def slack_callback_url() -> str:
@@ -30,23 +42,33 @@ def slack_callback_url() -> str:
     return f"{APP_BASE_URL.rstrip('/')}{SLACK_CALLBACK_PATH}"
 
 
-def build_slack_authorize_url(state: str) -> str:
+def build_slack_authorize_url(state: str, code_verifier: str) -> str:
     params = {
         "client_id": slack_client_id(),
         "user_scope": SLACK_USER_SCOPES,
         "redirect_uri": slack_callback_url(),
         "state": state,
+        "code_challenge": pkce_challenge(code_verifier),
+        "code_challenge_method": "S256",
     }
     return f"{SLACK_AUTHORIZE_URL}?{urllib.parse.urlencode(params)}"
 
 
-def exchange_slack_code_for_connection(user_id: str, code: str) -> dict:
+def exchange_slack_code_for_connection(
+    user_id: str,
+    code: str,
+    workspace_id: str | None = None,
+    *,
+    code_verifier: str | None = None,
+) -> dict:
     payload = {
         "client_id": slack_client_id(),
         "client_secret": slack_client_secret(),
         "code": code,
         "redirect_uri": slack_callback_url(),
     }
+    if code_verifier:
+        payload["code_verifier"] = code_verifier
     token_payload = slack_oauth_request(payload)
     authed_user = token_payload.get("authed_user") if isinstance(token_payload.get("authed_user"), dict) else {}
     access_token = str(authed_user.get("access_token") or "")
@@ -58,6 +80,15 @@ def exchange_slack_code_for_connection(user_id: str, code: str) -> dict:
     if not team_id or not team_name:
         raise ValidationError("Slack OAuth response is missing team information.")
     team_domain = fetch_team_domain(access_token)
+
+    normalized_workspace_id = (workspace_id or "").strip()
+    if normalized_workspace_id:
+        from .teams import workspace_slack_team_is_linked
+
+        if workspace_slack_team_is_linked(normalized_workspace_id, team_id):
+            status = get_slack_connection_status(user_id)
+            status["already_connected"] = True
+            return status
 
     with session_scope() as session:
         connection = session.scalar(
@@ -85,7 +116,19 @@ def exchange_slack_code_for_connection(user_id: str, code: str) -> dict:
         connection.updated_at = utc_now()
         session.flush()
         teams = [public_team(row) for row in session.scalars(select(SlackUserConnection).where(SlackUserConnection.user_id == user_id)).all()]
-        return public_connection(teams)
+
+    if normalized_workspace_id:
+        from .teams import link_workspace_slack_team
+
+        link_workspace_slack_team(
+            normalized_workspace_id,
+            user_id,
+            team_id,
+            team_name=team_name,
+            team_domain=team_domain,
+        )
+
+    return public_connection(teams)
 
 
 def fetch_team_domain(access_token: str) -> str | None:
@@ -110,8 +153,17 @@ def get_slack_connection_status(user_id: str) -> dict:
     return public_connection(teams)
 
 
-def disconnect_slack(user_id: str, team_id: str | None = None) -> dict:
+def disconnect_slack(user_id: str, team_id: str | None = None, remove_data: bool = False) -> dict:
     with session_scope() as session:
+        if remove_data:
+            source_statement = select(WorkspaceSlackSource.source_id).where(WorkspaceSlackSource.sync_owner_user_id == user_id)
+            delete_sources_statement = delete(WorkspaceSlackSource).where(WorkspaceSlackSource.sync_owner_user_id == user_id)
+            if team_id:
+                normalized_team_id = team_id.strip()
+                source_statement = source_statement.where(WorkspaceSlackSource.team_id == normalized_team_id)
+                delete_sources_statement = delete_sources_statement.where(WorkspaceSlackSource.team_id == normalized_team_id)
+            session.execute(delete(SlackIndexedItem).where(SlackIndexedItem.source_id.in_(source_statement)))
+            session.execute(delete_sources_statement)
         statement = delete(SlackUserConnection).where(SlackUserConnection.user_id == user_id)
         if team_id:
             statement = statement.where(SlackUserConnection.team_id == team_id.strip())
@@ -120,6 +172,10 @@ def disconnect_slack(user_id: str, team_id: str | None = None) -> dict:
         if team_id:
             cache_statement = cache_statement.where(SlackVisibilityCache.team_id == team_id.strip())
         session.execute(cache_statement)
+        workspace_cache_statement = delete(WorkspaceSlackAccessCache).where(WorkspaceSlackAccessCache.user_id == user_id)
+        if team_id:
+            workspace_cache_statement = workspace_cache_statement.where(WorkspaceSlackAccessCache.team_id == team_id.strip())
+        session.execute(workspace_cache_statement)
     return get_slack_connection_status(user_id)
 
 

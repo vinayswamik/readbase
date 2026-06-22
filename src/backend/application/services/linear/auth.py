@@ -1,17 +1,22 @@
 from __future__ import annotations
 
 import os
-import urllib.parse
 from secrets import token_urlsafe
 from typing import Any
 
 from sqlalchemy import delete, select
 
 from src.backend.application.services.auth_service import APP_BASE_URL
+from src.backend.application.services.connectors.oauth_core import (
+    ConnectorOAuthConfig,
+    ConnectorOAuthStart,
+    build_connector_authorize_url,
+    exchange_connector_code,
+)
 from src.backend.application.services.exceptions import PermissionDeniedError, ValidationError
 from src.backend.application.services.jira.crypto import decrypt_token, encrypt_token
 from src.backend.infrastructure.database import session_scope
-from src.backend.infrastructure.models import LinearUserConnection, LinearVisibilityCache, utc_now
+from src.backend.infrastructure.models import LinearIndexedItem, LinearUserConnection, LinearVisibilityCache, WorkspaceLinearSource, utc_now
 
 from .constants import LINEAR_AUTHORIZE_URL, LINEAR_CALLBACK_PATH, LINEAR_OAUTH_STATE_TTL_SECONDS, LINEAR_SCOPES, LINEAR_TOKEN_URL
 from .http import is_linear_configured, linear_client_id, linear_client_secret, linear_form_request, linear_graphql_request
@@ -30,28 +35,13 @@ def linear_callback_url() -> str:
 
 
 def build_linear_authorize_url(state: str) -> str:
-    params = {
-        "client_id": linear_client_id(),
-        "redirect_uri": linear_callback_url(),
-        "response_type": "code",
-        "scope": LINEAR_SCOPES,
-        "state": state,
-        "prompt": "consent",
-    }
-    return f"{LINEAR_AUTHORIZE_URL}?{urllib.parse.urlencode(params)}"
+    config = _linear_oauth_config()
+    start = ConnectorOAuthStart(state=state, code_verifier=None)
+    return build_connector_authorize_url(config, start)
 
 
 def exchange_linear_code_for_connection(user_id: str, code: str) -> dict:
-    token_payload = linear_form_request(
-        LINEAR_TOKEN_URL,
-        {
-            "client_id": linear_client_id(),
-            "client_secret": linear_client_secret(),
-            "code": code,
-            "grant_type": "authorization_code",
-            "redirect_uri": linear_callback_url(),
-        },
-    )
+    token_payload = exchange_connector_code(_linear_oauth_config(), code, None)
     access_token = str(token_payload.get("access_token") or "")
     if not access_token:
         raise ValidationError("Linear OAuth response is missing access_token.")
@@ -91,8 +81,12 @@ def get_linear_connection_status(user_id: str) -> dict:
         return public_connection(connection)
 
 
-def disconnect_linear(user_id: str) -> dict:
+def disconnect_linear(user_id: str, remove_data: bool = False) -> dict:
     with session_scope() as session:
+        if remove_data:
+            source_ids = select(WorkspaceLinearSource.source_id).where(WorkspaceLinearSource.sync_owner_user_id == user_id)
+            session.execute(delete(LinearIndexedItem).where(LinearIndexedItem.source_id.in_(source_ids)))
+            session.execute(delete(WorkspaceLinearSource).where(WorkspaceLinearSource.sync_owner_user_id == user_id))
         session.execute(delete(LinearUserConnection).where(LinearUserConnection.user_id == user_id))
         session.execute(delete(LinearVisibilityCache).where(LinearVisibilityCache.user_id == user_id))
     return {"connected": False, "configured": is_linear_configured()}
@@ -111,3 +105,17 @@ def optional_str(value: Any) -> str | None:
         return None
     text = str(value)
     return text if text else None
+
+
+def _linear_oauth_config() -> ConnectorOAuthConfig:
+    return ConnectorOAuthConfig(
+        connector_id="linear",
+        client_id=linear_client_id(),
+        client_secret=linear_client_secret(),
+        authorize_url=LINEAR_AUTHORIZE_URL,
+        token_url=LINEAR_TOKEN_URL,
+        redirect_uri=linear_callback_url(),
+        scopes=LINEAR_SCOPES,
+        supports_pkce=False,
+        extra_authorize_params={"prompt": "consent"},
+    )

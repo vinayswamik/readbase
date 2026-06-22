@@ -16,7 +16,7 @@ class GithubServiceTests(unittest.TestCase):
         self.original_url = str(database.engine.url)
         database.configure_database(f"sqlite:///{self.data_dir / 'test.db'}")
         database.Base.metadata.drop_all(bind=database.engine)
-        database.init_database(seed_admins=False)
+        database.init_database()
 
     def tearDown(self):
         database.Base.metadata.drop_all(bind=database.engine)

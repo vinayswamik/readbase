@@ -7,18 +7,25 @@ from uuid import uuid4
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 
-from src.backend.application.services.auth_service import AuthUser
+from src.backend.application.services.auth_service import AuthUser, normalize_email_key
 from src.backend.application.services.exceptions import (
     PermissionDeniedError,
     ResourceNotFoundError,
     ValidationError,
 )
 from src.backend.infrastructure.database import session_scope
+from src.backend.application.services.workspace_invite_service import (
+    mark_invite_active,
+    prepare_link_workspace_invite,
+    prepare_workspace_invite,
+    _public_invite,
+)
 from src.backend.infrastructure.models import (
     HierarchyConnection,
     HierarchyNode,
     User,
     Workspace,
+    WorkspaceInvite,
     WorkspaceMember,
 )
 
@@ -36,7 +43,13 @@ def get_workspace_graph(workspace_id: str, user: AuthUser) -> dict:
             .order_by(HierarchyConnection.created_at.asc())
         ).all()
         users_by_id = _workspace_users_by_id(session, workspace_id)
-        visible_nodes, visible_connections = _visible_graph_for_user(nodes, connections, user)
+        can_manage_graph = _user_can_manage_workspace_graph(session, workspace_id, user)
+        visible_nodes, visible_connections = _visible_graph_for_user(
+            nodes,
+            connections,
+            user,
+            can_manage_graph,
+        )
         return {
             "nodes": [_public_node(node, users_by_id) for node in visible_nodes],
             "connections": [_public_connection(connection) for connection in visible_connections],
@@ -49,12 +62,67 @@ def create_hierarchy_node(
     user: AuthUser,
     *,
     display_name: str,
-    assigned_user_id: str,
+    assigned_user_id: str | None = None,
+    invitee_email: str | None = None,
+    invite_method: str = "email",
+    invitor_designation: str = "",
+    relation: str = "",
+    reason: str = "",
     x: float = 0,
     y: float = 0,
     parent_node_id: str | None = None,
 ) -> dict:
     normalized_display_name = _normalize_display_name(display_name)
+    normalized_invite_method = (invite_method or "email").strip().lower()
+
+    if normalized_invite_method == "link":
+        with session_scope() as session:
+            invite, workspace_name, join_token_raw = prepare_link_workspace_invite(
+                session,
+                workspace_id,
+                user,
+                invitor_designation=invitor_designation,
+                relation=relation,
+                reason=reason,
+                node_display_name=normalized_display_name,
+                parent_node_id=parent_node_id,
+                node_x=x,
+                node_y=y,
+            )
+            return {
+                "node": None,
+                "connection": None,
+                "invite": _public_invite(
+                    invite,
+                    workspace_name,
+                    "sent",
+                    reveal_join_token=join_token_raw,
+                ),
+            }
+
+    if invitee_email:
+        with session_scope() as session:
+            invite, workspace_name = prepare_workspace_invite(
+                session,
+                workspace_id,
+                user,
+                invitee_email=invitee_email,
+                invitor_designation=invitor_designation,
+                relation=relation,
+                reason=reason,
+                node_display_name=normalized_display_name,
+                parent_node_id=parent_node_id,
+                node_x=x,
+                node_y=y,
+            )
+            return {
+                "node": None,
+                "connection": None,
+                "invite": _public_invite(invite, workspace_name, "sent"),
+            }
+
+    if not assigned_user_id:
+        raise ValidationError("Invitee email or invite link is required.")
 
     with session_scope() as session:
         users_by_id = _workspace_users_by_id(session, workspace_id)
@@ -64,7 +132,7 @@ def create_hierarchy_node(
             raise ValidationError("Assigned user already has a hierarchy node.")
 
         parent = None
-        if user.role == "admin":
+        if _user_can_manage_workspace_graph(session, workspace_id, user):
             if parent_node_id:
                 parent = _get_node(session, workspace_id, parent_node_id)
         else:
@@ -88,10 +156,73 @@ def create_hierarchy_node(
         connection = None
         if parent is not None:
             connection = _create_connection(session, workspace_id, user, parent, node)
+
+        invite_payload = None
+        if invitee_email:
+            invite = session.scalar(
+                select(WorkspaceInvite)
+                .where(
+                    WorkspaceInvite.workspace_id == workspace_id,
+                    WorkspaceInvite.invitee_email_key
+                    == normalize_email_key(invitee_email),
+                    WorkspaceInvite.node_id.is_(None),
+                )
+                .order_by(WorkspaceInvite.created_at.desc())
+            )
+            if invite is not None:
+                mark_invite_active(session, invite, node.node_id)
+                workspace_name = session.scalar(
+                    select(Workspace.name).where(Workspace.workspace_id == workspace_id)
+                )
+                invite_payload = _public_invite_from_model(invite, workspace_name or "")
+
         return {
             "node": _public_node(node, users_by_id),
             "connection": _public_connection(connection) if connection else None,
+            "invite": invite_payload,
         }
+
+
+def create_node_from_invite(invite_id: str, invitee_user_id: str) -> None:
+    with session_scope() as session:
+        invite = session.get(WorkspaceInvite, invite_id)
+        if invite is None or invite.node_id is not None or invite.status != "pending":
+            return
+        if invite.invitee_user_id and invite.invitee_user_id != invitee_user_id:
+            return
+        existing_node = _node_for_assigned_user(session, invite.workspace_id, invitee_user_id)
+        if existing_node is not None:
+            mark_invite_active(session, invite, existing_node.node_id)
+            return
+
+        invitor = session.get(User, invite.invitor_user_id)
+        if invitor is None:
+            return
+        actor = AuthUser(invitor.user_id, invitor.email, invitor.name)
+
+        parent = None
+        if invite.parent_node_id:
+            parent = session.scalar(
+                select(HierarchyNode).where(
+                    HierarchyNode.workspace_id == invite.workspace_id,
+                    HierarchyNode.node_id == invite.parent_node_id,
+                )
+            )
+
+        node = HierarchyNode(
+            node_id=_new_id("node"),
+            workspace_id=invite.workspace_id,
+            display_name=invite.node_display_name,
+            assigned_user_id=invitee_user_id,
+            x=float(invite.node_x),
+            y=float(invite.node_y),
+            created_by_user_id=invite.invitor_user_id,
+        )
+        session.add(node)
+        session.flush()
+        if parent is not None:
+            _create_connection(session, invite.workspace_id, actor, parent, node)
+        mark_invite_active(session, invite, node.node_id)
 
 
 def update_hierarchy_node(
@@ -114,8 +245,12 @@ def update_hierarchy_node(
         changing_management_fields = (
             display_name is not None or assigned_user_id is not None or parent_node_id is not None
         )
-        if changing_management_fields and user.role != "admin":
-            raise PermissionDeniedError("Only admins can rename, reassign, or reparent nodes.")
+        if changing_management_fields and not _user_can_manage_workspace_graph(
+            session, workspace_id, user
+        ):
+            raise PermissionDeniedError(
+                "Only the workspace owner can rename, reassign, or reparent nodes."
+            )
 
         if display_name is not None:
             node.display_name = _normalize_display_name(display_name)
@@ -153,7 +288,9 @@ def delete_hierarchy_node(workspace_id: str, user: AuthUser, node_id: str) -> di
             )
         ).all():
             session.delete(connection)
+        assigned_user_id = node.assigned_user_id
         session.delete(node)
+        _revoke_member_access_without_node(session, workspace_id, assigned_user_id)
         return public
 
 
@@ -164,9 +301,11 @@ def create_hierarchy_connection(
     parent_node_id: str,
     child_node_id: str,
 ) -> dict:
-    if user.role != "admin":
-        raise PermissionDeniedError("Only admins can manually connect nodes.")
     with session_scope() as session:
+        if not _user_can_manage_workspace_graph(session, workspace_id, user):
+            raise PermissionDeniedError(
+                "Only the workspace owner can manually connect nodes."
+            )
         parent = _get_node(session, workspace_id, parent_node_id)
         child = _get_node(session, workspace_id, child_node_id)
         connection = _create_connection(session, workspace_id, user, parent, child)
@@ -174,9 +313,11 @@ def create_hierarchy_connection(
 
 
 def delete_hierarchy_connection(workspace_id: str, user: AuthUser, connection_id: str) -> dict:
-    if user.role != "admin":
-        raise PermissionDeniedError("Only admins can remove connections.")
     with session_scope() as session:
+        if not _user_can_manage_workspace_graph(session, workspace_id, user):
+            raise PermissionDeniedError(
+                "Only the workspace owner can remove connections."
+            )
         connection = _get_connection(session, workspace_id, connection_id)
         public = _public_connection(connection)
         session.delete(connection)
@@ -192,7 +333,10 @@ def _create_connection(
 ) -> HierarchyConnection:
     if parent.node_id == child.node_id:
         raise ValidationError("A node cannot connect to itself.")
-    if user.role != "admin" and parent.assigned_user_id != user.user_id:
+    if (
+        not _user_can_manage_workspace_graph(session, workspace_id, user)
+        and parent.assigned_user_id != user.user_id
+    ):
         raise PermissionDeniedError("Members can create children only under their own node.")
     if _would_create_cycle(session, workspace_id, parent.node_id, child.node_id):
         raise ValidationError("Connection would create a cycle.")
@@ -219,8 +363,8 @@ def _reparent_node(
     node: HierarchyNode,
     parent_node_id: str,
 ) -> None:
-    if user.role != "admin":
-        raise PermissionDeniedError("Only admins can reparent nodes.")
+    if not _user_can_manage_workspace_graph(session, workspace_id, user):
+        raise PermissionDeniedError("Only the workspace owner can reparent nodes.")
     if parent_node_id == "":
         for connection in _incoming_connections(session, workspace_id, node.node_id):
             session.delete(connection)
@@ -255,7 +399,7 @@ def _ensure_can_delete_node(
     user: AuthUser,
     node: HierarchyNode,
 ) -> None:
-    if user.role == "admin":
+    if _user_can_manage_workspace_graph(session, workspace_id, user):
         return
     if node.assigned_user_id == user.user_id:
         raise PermissionDeniedError("Members cannot delete their own node.")
@@ -307,12 +451,55 @@ def _would_create_cycle(
     return False
 
 
+def _revoke_member_access_without_node(
+    session,
+    workspace_id: str,
+    user_id: str,
+) -> None:
+    workspace = session.get(Workspace, workspace_id)
+    if workspace is None or workspace.owner_user_id == user_id:
+        return
+
+    remaining_node = session.scalar(
+        select(HierarchyNode.node_id).where(
+            HierarchyNode.workspace_id == workspace_id,
+            HierarchyNode.assigned_user_id == user_id,
+        )
+    )
+    if remaining_node is not None:
+        return
+
+    member = session.scalar(
+        select(WorkspaceMember).where(
+            WorkspaceMember.workspace_id == workspace_id,
+            WorkspaceMember.user_id == user_id,
+        )
+    )
+    if member is not None:
+        session.delete(member)
+
+    for invite in session.scalars(
+        select(WorkspaceInvite).where(
+            WorkspaceInvite.workspace_id == workspace_id,
+            WorkspaceInvite.invitee_user_id == user_id,
+            WorkspaceInvite.status == "pending",
+        )
+    ).all():
+        session.delete(invite)
+
+
+def _user_can_manage_workspace_graph(session, workspace_id: str, user: AuthUser) -> bool:
+    workspace = session.get(Workspace, workspace_id)
+    return workspace is not None and workspace.owner_user_id == user.user_id
+
+
 def _visible_graph_for_user(
     nodes: list[HierarchyNode],
     connections: list[HierarchyConnection],
     user: AuthUser,
+    can_manage_graph: bool,
 ) -> tuple[list[HierarchyNode], list[HierarchyConnection]]:
-    if user.role == "admin":
+    if can_manage_graph:
         return nodes, connections
 
     own_node = next((node for node in nodes if node.assigned_user_id == user.user_id), None)
@@ -446,6 +633,10 @@ def _public_node(node: HierarchyNode, users_by_id: dict[str, dict]) -> dict:
         "created_at": _format_datetime(node.created_at),
         "updated_at": _format_datetime(node.updated_at),
     }
+
+
+def _public_invite_from_model(invite: WorkspaceInvite, workspace_name: str) -> dict:
+    return _public_invite(invite, workspace_name, "sent")
 
 
 def _public_connection(connection: HierarchyConnection) -> dict:

@@ -1,3 +1,5 @@
+import { ReadbaseLogoIcon } from "../components/ReadbaseLogoIcon";
+
 export function LoginPage({
   loading,
   error,
@@ -5,46 +7,55 @@ export function LoginPage({
 }: {
   loading: boolean;
   error: string | null;
-  onLogin: (portal: "admin" | "member") => void;
+  onLogin: () => void;
 }) {
   return (
     <main className="login-page">
-      <section className="login-panel" aria-labelledby="login-title">
-        <header className="login-header">
-          <span className="brand-badge">Readbase</span>
-          <h1 id="login-title">Choose your login</h1>
-          <p>Admins manage workspaces. Members use workspaces they have been added to.</p>
-        </header>
+      <header className="login-topbar">
+        <span className="login-logo" aria-label="Readbase">
+          <span className="login-logo-icon-wrap">
+            <ReadbaseLogoIcon className="login-logo-icon" />
+          </span>
+          <span className="login-logo-text">readbase</span>
+        </span>
+        <button
+          className="login-topbar-button"
+          type="button"
+          onClick={onLogin}
+          disabled={loading}
+        >
+          {loading ? "Signing in..." : "Login"}
+        </button>
+      </header>
 
-        <div className="provider-grid">
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() => onLogin("admin")}
-            disabled={loading}
-          >
-            {loading ? "Signing in..." : "Admin Login"}
-          </button>
-          <button
-            className="secondary-button muted-button"
-            type="button"
-            onClick={() => onLogin("member")}
-            disabled={loading}
-          >
-            {loading ? "Signing in..." : "Member Login"}
-          </button>
-        </div>
+      <div className="login-page-body">
+        <section className="login-panel" aria-labelledby="login-title">
+          <header className="login-header">
+            <h1 id="login-title">Sign in to readbase</h1>
+          </header>
 
-        {error ? (
-          <p className="error-note" role="status" aria-live="polite">
-            {error}
+          <div className="provider-grid">
+            <button
+              className="login-topbar-button"
+              type="button"
+              onClick={onLogin}
+              disabled={loading}
+            >
+              {loading ? "Signing in..." : "Sign in with your organization"}
+            </button>
+          </div>
+
+          {error ? (
+            <p className="error-note" role="status" aria-live="polite">
+              {error}
+            </p>
+          ) : null}
+
+          <p className="footer-note">
+            Your organization&apos;s identity provider keeps your account secure.
           </p>
-        ) : null}
-
-        <p className="footer-note">
-          Both options use Google sign-in.
-        </p>
-      </section>
+        </section>
+      </div>
     </main>
   );
 }

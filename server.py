@@ -12,7 +12,10 @@ from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from src.backend.api.routes import api_router
+from src.backend.api.security_middleware import SecurityMiddleware
+from src.backend.application.services.auth.config import validate_auth_secrets
 from src.backend.application.services.confluence_service import start_confluence_sync_scheduler
+from src.backend.application.services.notion_service import start_notion_sync_scheduler
 from src.backend.application.services.jira_service import start_jira_sync_scheduler
 from src.backend.application.services.linear_service import start_linear_sync_scheduler
 from src.backend.application.services.slack_service import start_slack_sync_scheduler
@@ -21,17 +24,22 @@ from src.backend.infrastructure.database import init_database
 # Local dev bind address and where the frontend build writes browser assets.
 HOST = "127.0.0.1"
 PORT = 8000
-FRONTEND_DIST_DIR = Path(__file__).resolve().parent / "frontend" / "dist"
+PROJECT_ROOT = Path(__file__).resolve().parent
+FRONTEND_DIR = PROJECT_ROOT / "frontend"
+FRONTEND_DIST_DIR = FRONTEND_DIR / "dist"
 
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Readbase", version="0.2.0")
+    validate_auth_secrets()
     init_database()
+    app.add_middleware(SecurityMiddleware)
     app.include_router(api_router)
     start_jira_sync_scheduler()
     start_slack_sync_scheduler()
     start_linear_sync_scheduler()
     start_confluence_sync_scheduler()
+    start_notion_sync_scheduler()
     app.get("/", response_model=None)(frontend_root)
     app.mount(
         "/assets",
@@ -46,7 +54,7 @@ def frontend_root() -> Response:
     index_file = FRONTEND_DIST_DIR / "index.html"
     if not index_file.exists():
         return PlainTextResponse(
-            "Frontend build missing. Run `npm install` and `npm run build` from frontend/.",
+            "Frontend build missing. Run `python3 server.py` from the project root.",
             status_code=503,
         )
     return FileResponse(
@@ -101,11 +109,44 @@ def release_port(port: int) -> None:
     time.sleep(0.1)
 
 
-# CLI entry: `python server.py` starts uvicorn, the ASGI server FastAPI runs on.
+# CLI entry: `python3 server.py` builds the frontend and starts uvicorn.
+def build_frontend() -> None:
+    """Build the Vite frontend before serving it from FastAPI."""
+    if os.environ.get("READBASE_SKIP_FRONTEND_BUILD"):
+        return
+    if not (FRONTEND_DIR / "package.json").exists():
+        raise RuntimeError(f"Frontend package not found at {FRONTEND_DIR}")
+    try:
+        subprocess.run(
+            ["npm", "run", "build"],
+            cwd=FRONTEND_DIR,
+            check=True,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError("npm is required to build the frontend before starting Readbase.") from exc
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError("Frontend build failed. Fix the frontend errors and run again.") from exc
+
+
 def main() -> None:
+    build_frontend()
     release_port(PORT)
-    print(f"Readbase running at http://{HOST}:{PORT}")
-    uvicorn.run(app, host=HOST, port=PORT)
+    ssl_certfile = os.getenv("READBASE_SSL_CERTFILE", "").strip()
+    ssl_keyfile = os.getenv("READBASE_SSL_KEYFILE", "").strip()
+    uvicorn_kwargs: dict = {"host": HOST, "port": PORT}
+    if ssl_certfile and ssl_keyfile:
+        cert_path = Path(ssl_certfile)
+        key_path = Path(ssl_keyfile)
+        if not cert_path.is_absolute():
+            cert_path = PROJECT_ROOT / cert_path
+        if not key_path.is_absolute():
+            key_path = PROJECT_ROOT / key_path
+        uvicorn_kwargs["ssl_certfile"] = str(cert_path)
+        uvicorn_kwargs["ssl_keyfile"] = str(key_path)
+        print(f"Readbase running at https://{HOST}:{PORT}")
+    else:
+        print(f"Readbase running at http://{HOST}:{PORT}")
+    uvicorn.run(app, **uvicorn_kwargs)
 
 
 if __name__ == "__main__":

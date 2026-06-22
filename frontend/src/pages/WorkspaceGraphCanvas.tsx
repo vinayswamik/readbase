@@ -1,6 +1,6 @@
 import type { MouseEvent, ReactNode, RefObject } from "react";
 
-import type { AuthUser, HierarchyNode } from "../types";
+import type { HierarchyNode } from "../types";
 
 export type Viewport = {
   x: number;
@@ -21,64 +21,79 @@ export type EdgeSegment = {
   angle: number;
 };
 
+export type NodeEditAnchor = {
+  nodeId: string;
+  offsetX: number;
+  offsetY: number;
+};
+
 export function WorkspaceGraphCanvas({
-  userRole,
-  panelOpen,
+  workspaceName,
   graphRevision,
   boardRef,
   nodes,
   visibleNodes,
   selectedNodeId,
+  nodeEditAnchor,
   viewport,
   edgeSegments,
   chatOpen,
   messageCount,
   children,
-  onPanelToggle,
+  onBack,
+  onAddNode,
   onZoom,
   onViewportReset,
   onBoardMouseDown,
   onBoardMouseMove,
   onBoardMouseUp,
   onNodeClick,
+  onEditNode,
   onOpenChat,
 }: {
-  userRole: AuthUser["role"];
-  panelOpen: boolean;
+  workspaceName: string;
   graphRevision: number;
   boardRef: RefObject<HTMLDivElement | null>;
   nodes: HierarchyNode[];
   visibleNodes: HierarchyNode[];
   selectedNodeId: string | null;
+  nodeEditAnchor: NodeEditAnchor | null;
   viewport: Viewport;
   edgeSegments: EdgeSegment[];
   chatOpen: boolean;
   messageCount: number;
   children: ReactNode;
-  onPanelToggle: () => void;
+  onBack: () => void;
+  onAddNode: () => void;
   onZoom: (delta: number) => void;
   onViewportReset: () => void;
   onBoardMouseDown: (event: MouseEvent<HTMLDivElement>) => void;
   onBoardMouseMove: (event: MouseEvent<HTMLDivElement>) => void;
   onBoardMouseUp: () => void;
   onNodeClick: (event: MouseEvent<HTMLButtonElement>, node: HierarchyNode) => void;
+  onEditNode: (node: HierarchyNode) => void;
   onOpenChat: () => void;
 }) {
   return (
     <section className="graph-stage" aria-label="Hierarchy graph board">
-      <button
-        type="button"
-        className="panel-toggle"
-        aria-expanded={panelOpen}
-        onClick={onPanelToggle}
-      >
-        {panelOpen ? "Hide panel" : "Show panel"}
-      </button>
+      <div className="graph-stage-topbar">
+        <button type="button" className="graph-back-button" onClick={onBack}>
+          Back
+        </button>
+        <div className="graph-stage-title">
+          <strong>{workspaceName}</strong>
+          <span>Hierarchy graph</span>
+        </div>
+      </div>
       <div className="graph-toolbar" aria-label="Board controls">
-        <button type="button" onClick={() => onZoom(0.1)}>
+        <button type="button" className="graph-toolbar-add-node" onClick={onAddNode}>
+          Add node
+        </button>
+        <span className="graph-toolbar-divider" aria-hidden="true" />
+        <button type="button" onClick={() => onZoom(0.1)} aria-label="Zoom in">
           +
         </button>
-        <button type="button" onClick={() => onZoom(-0.1)}>
+        <button type="button" onClick={() => onZoom(-0.1)} aria-label="Zoom out">
           -
         </button>
         <button type="button" onClick={onViewportReset}>
@@ -101,9 +116,7 @@ export function WorkspaceGraphCanvas({
       >
         {!nodes.length ? (
           <div className="graph-empty">
-            {userRole === "admin"
-              ? "Create a parent node from the panel to start the hierarchy."
-              : "The board is empty. Wait for an admin to create a parent node."}
+            Use Add node in the toolbar to start the hierarchy.
           </div>
         ) : null}
         <div
@@ -118,16 +131,36 @@ export function WorkspaceGraphCanvas({
             ))}
           </div>
           {visibleNodes.map((node) => (
-            <button
+            <div
               key={node.node_id}
-              type="button"
-              className={`graph-node${node.node_id === selectedNodeId ? " selected" : ""}`}
+              className="graph-node-shell"
               style={{ left: node.x, top: node.y }}
-              onClick={(event) => onNodeClick(event, node)}
             >
-              <strong>{node.display_name}</strong>
-              <span>{node.assigned_user_name || node.assigned_user_email || "Assigned user"}</span>
-            </button>
+              <button
+                type="button"
+                className={`graph-node${node.node_id === selectedNodeId ? " selected" : ""}`}
+                onClick={(event) => onNodeClick(event, node)}
+              >
+                <strong>{node.display_name}</strong>
+                <span>{node.assigned_user_name || node.assigned_user_email || "Assigned user"}</span>
+              </button>
+              {nodeEditAnchor?.nodeId === node.node_id ? (
+                <button
+                  type="button"
+                  className="graph-node-edit-button"
+                  style={{
+                    left: nodeEditAnchor.offsetX,
+                    top: nodeEditAnchor.offsetY,
+                  }}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onEditNode(node);
+                  }}
+                >
+                  Edit
+                </button>
+              ) : null}
+            </div>
           ))}
         </div>
       </div>

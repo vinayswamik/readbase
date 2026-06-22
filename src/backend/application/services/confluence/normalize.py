@@ -4,14 +4,15 @@ import hashlib
 import re
 from datetime import datetime
 from html import unescape
+from typing import Any
 
-from src.backend.infrastructure.models import WorkspaceConfluenceSource, utc_now
+from src.backend.infrastructure.models import utc_now
 
 
 TAG_RE = re.compile(r"<[^>]+>")
 
 
-def normalize_pages(source: WorkspaceConfluenceSource, pages: list[dict]) -> list[dict]:
+def normalize_pages(source: dict[str, Any], pages: list[dict]) -> list[dict]:
     rows: list[dict] = []
     for page in pages:
         page_id = str(page.get("id") or "")
@@ -19,14 +20,14 @@ def normalize_pages(source: WorkspaceConfluenceSource, pages: list[dict]) -> lis
         body = page_body(page)
         if not page_id or not body:
             continue
-        url = page_url(source.site_url, page_id)
+        url = page_url(str(source.get("site_url") or ""), page_id)
         rows.append(
             {
-                "source_id": source.source_id,
-                "workspace_id": source.workspace_id,
-                "cloud_id": source.cloud_id,
-                "space_id": source.space_id,
-                "space_key": source.space_key,
+                "source_id": str(source.get("source_id") or ""),
+                "workspace_id": str(source.get("workspace_id") or ""),
+                "cloud_id": str(source.get("cloud_id") or ""),
+                "space_id": str(source.get("space_id") or ""),
+                "space_key": str(source.get("space_key") or ""),
                 "page_id": page_id,
                 "item_type": "page",
                 "item_id": page_id,

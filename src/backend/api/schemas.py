@@ -61,7 +61,6 @@ class AuthUserResponse(BaseModel):
     id: str
     email: str
     name: str
-    role: str
 
 
 class SessionResponse(BaseModel):
@@ -87,6 +86,36 @@ class WorkspaceMemberResponse(BaseModel):
 
 class WorkspaceMembersResponse(BaseModel):
     members: list[WorkspaceMemberResponse]
+
+
+class WorkspaceInvitesResponse(BaseModel):
+    received: list["WorkspaceInviteListItemResponse"]
+    sent: list["WorkspaceInviteListItemResponse"]
+
+
+class WorkspaceInviteListItemResponse(BaseModel):
+    invite_id: str
+    workspace_id: str
+    workspace_name: str
+    direction: str
+    invitee_email: str
+    invitee_name: str
+    invitee_user_id: str | None = None
+    invitor_user_id: str
+    invitor_name: str
+    invitor_designation: str
+    relation: str
+    reason: str
+    node_display_name: str
+    node_id: str | None = None
+    status: str
+    can_accept: bool = False
+    can_reject: bool = False
+    can_revert: bool = False
+    invite_method: str = "email"
+    join_token: str | None = None
+    join_path: str | None = None
+    created_at: str
 
 
 class UpdateWorkspaceMemberConnectorManagerRequest(BaseModel):
@@ -215,6 +244,25 @@ class SlackChannelsResponse(BaseModel):
     channels: list[SlackChannelResponse]
 
 
+class TeamsTeamResponse(BaseModel):
+    team_id: str
+    display_name: str
+    description: str | None = None
+    web_url: str | None = None
+
+
+class TeamsConnectionResponse(BaseModel):
+    connected: bool
+    configured: bool = False
+    microsoft_user_id: str | None = None
+    tenant_id: str | None = None
+    display_name: str | None = None
+    user_principal_name: str | None = None
+    mail: str | None = None
+    scopes: list[str] = []
+    teams: list[TeamsTeamResponse] = []
+
+
 class AddWorkspaceSlackChannelRequest(BaseModel):
     team_id: str
     team_name: str
@@ -247,6 +295,24 @@ class WorkspaceSlackSourceResponse(BaseModel):
 
 class WorkspaceSlackSourcesResponse(BaseModel):
     sources: list[WorkspaceSlackSourceResponse]
+
+
+class WorkspaceSlackTeamResponse(BaseModel):
+    team_id: str
+    team_name: str
+    team_domain: str | None = None
+    linked_by_user_id: str
+    linked_at: str
+    updated_at: str
+    user_oauth_connected: bool = False
+
+
+class WorkspaceSlackTeamsResponse(BaseModel):
+    teams: list[WorkspaceSlackTeamResponse]
+
+
+class LinkWorkspaceSlackTeamRequest(BaseModel):
+    team_id: str
 
 
 class LinearConnectionResponse(BaseModel):
@@ -365,6 +431,55 @@ class WorkspaceConfluenceSourcesResponse(BaseModel):
     sources: list[WorkspaceConfluenceSourceResponse]
 
 
+class NotionConnectionResponse(BaseModel):
+    connected: bool
+    configured: bool = False
+    workspace_id: str | None = None
+    workspace_name: str | None = None
+    workspace_icon: str | None = None
+    bot_id: str | None = None
+    owner_type: str | None = None
+    owner_name: str | None = None
+
+
+class NotionDatabaseResponse(BaseModel):
+    notion_workspace_id: str
+    workspace_name: str
+    database_id: str
+    database_title: str
+
+
+class NotionDatabasesResponse(BaseModel):
+    databases: list[NotionDatabaseResponse]
+
+
+class AddWorkspaceNotionDatabaseRequest(BaseModel):
+    notion_workspace_id: str
+    database_id: str
+    database_title: str
+
+
+class WorkspaceNotionSourceResponse(BaseModel):
+    source_id: str
+    workspace_id: str
+    notion_workspace_id: str
+    database_id: str
+    database_title: str
+    added_by_user_id: str
+    sync_owner_user_id: str
+    sync_status: str
+    sync_error: str | None = None
+    last_synced_at: str | None = None
+    next_sync_at: str | None = None
+    created_at: str
+    updated_at: str
+    user_access: str = "unknown"
+
+
+class WorkspaceNotionSourcesResponse(BaseModel):
+    sources: list[WorkspaceNotionSourceResponse]
+
+
 class JiraProjectResponse(BaseModel):
     cloud_id: str
     site_name: str
@@ -376,6 +491,21 @@ class JiraProjectResponse(BaseModel):
 
 class JiraProjectsResponse(BaseModel):
     projects: list[JiraProjectResponse]
+
+
+class WorkspaceJiraSiteResponse(BaseModel):
+    cloud_id: str
+    name: str
+    url: str
+
+
+class WorkspaceJiraSiteStatusResponse(BaseModel):
+    connected: bool
+    site: WorkspaceJiraSiteResponse | None = None
+
+
+class ConnectWorkspaceJiraSiteRequest(BaseModel):
+    cloud_id: str
 
 
 class AddWorkspaceJiraProjectRequest(BaseModel):
@@ -461,15 +591,45 @@ class HierarchyGraphResponse(BaseModel):
 
 class CreateHierarchyNodeRequest(BaseModel):
     display_name: str
-    assigned_user_id: str
+    assigned_user_id: str | None = None
+    invitee_email: str | None = None
+    invite_method: str = "email"
+    invitor_designation: str = ""
+    relation: str = ""
+    reason: str = ""
     x: float = 0
     y: float = 0
     parent_node_id: str | None = None
 
 
+class WorkspaceInviteResponse(BaseModel):
+    invite_id: str
+    workspace_id: str
+    workspace_name: str = ""
+    invitee_email: str
+    invitee_name: str
+    invitee_user_id: str | None = None
+    invitor_user_id: str
+    invitor_name: str
+    invitor_designation: str
+    relation: str
+    reason: str
+    node_display_name: str
+    node_id: str | None = None
+    status: str
+    can_accept: bool = False
+    can_reject: bool = False
+    can_revert: bool = False
+    invite_method: str = "email"
+    join_token: str | None = None
+    join_path: str | None = None
+    created_at: str
+
+
 class CreateHierarchyNodeResponse(BaseModel):
-    node: HierarchyNodeResponse
+    node: HierarchyNodeResponse | None = None
     connection: HierarchyConnectionResponse | None = None
+    invite: WorkspaceInviteResponse | None = None
 
 
 class UpdateHierarchyNodeRequest(BaseModel):
@@ -483,3 +643,35 @@ class UpdateHierarchyNodeRequest(BaseModel):
 class CreateHierarchyConnectionRequest(BaseModel):
     parent_node_id: str
     child_node_id: str
+
+
+class OrganizationStorageResponse(BaseModel):
+    blob_backend: str
+    storage_root: str
+
+
+class OrganizationResponse(BaseModel):
+    org_id: str
+    name: str
+    role: str
+    storage: OrganizationStorageResponse
+
+
+class CreateOrganizationRequest(BaseModel):
+    name: str
+    storage_root: str
+    blob_backend: str = "local"
+
+
+class UpdateOrganizationStorageRequest(BaseModel):
+    storage_root: str
+    blob_backend: str | None = None
+
+
+class AssignWorkspaceOrganizationRequest(BaseModel):
+    workspace_id: str
+
+
+class WorkspaceOrganizationResponse(BaseModel):
+    workspace_id: str
+    organization_id: str

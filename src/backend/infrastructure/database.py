@@ -50,16 +50,14 @@ def session_scope() -> Iterator[Session]:
         session.close()
 
 
-def init_database(*, seed_admins: bool = True) -> None:
-    from src.backend.application.services.auth_service import seed_bootstrap_admins
+def init_database() -> None:
     from src.backend.infrastructure import models  # noqa: F401
+    from src.backend.infrastructure import storage_models  # noqa: F401
 
     settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
     _reset_legacy_hierarchy_schema()
     Base.metadata.create_all(bind=engine)
     _ensure_incremental_schema()
-    if seed_admins:
-        seed_bootstrap_admins()
 
 
 def _reset_legacy_hierarchy_schema() -> None:
@@ -86,4 +84,52 @@ def _ensure_incremental_schema() -> None:
             with engine.begin() as connection:
                 connection.execute(
                     text("ALTER TABLE workspace_members ADD COLUMN connector_manager BOOLEAN NOT NULL DEFAULT 0")
+                )
+    if "workspaces" in table_names:
+        column_names = {column["name"] for column in inspector.get_columns("workspaces")}
+        if "organization_id" not in column_names:
+            with engine.begin() as connection:
+                connection.execute(
+                    text("ALTER TABLE workspaces ADD COLUMN organization_id VARCHAR(96)")
+                )
+        if "join_code" not in column_names:
+            with engine.begin() as connection:
+                connection.execute(
+                    text("ALTER TABLE workspaces ADD COLUMN join_code VARCHAR(32)")
+                )
+                connection.execute(
+                    text(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS ix_workspaces_join_code "
+                        "ON workspaces (join_code)"
+                    )
+                )
+    if "workspace_invites" not in table_names and "workspaces" in table_names:
+        from src.backend.infrastructure import models
+
+        Base.metadata.create_all(bind=engine, tables=[models.WorkspaceInvite.__table__])
+        table_names.add("workspace_invites")
+    if "workspace_invites" in table_names:
+        column_names = {column["name"] for column in inspector.get_columns("workspace_invites")}
+        if "join_token" not in column_names:
+            with engine.begin() as connection:
+                connection.execute(
+                    text("ALTER TABLE workspace_invites ADD COLUMN join_token VARCHAR(64)")
+                )
+                connection.execute(
+                    text(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS ix_workspace_invites_join_token "
+                        "ON workspace_invites (join_token)"
+                    )
+                )
+        if "expires_at" not in column_names:
+            with engine.begin() as connection:
+                connection.execute(
+                    text("ALTER TABLE workspace_invites ADD COLUMN expires_at DATETIME")
+                )
+                connection.execute(
+                    text(
+                        "UPDATE workspace_invites "
+                        "SET expires_at = datetime(created_at, '+7 days') "
+                        "WHERE expires_at IS NULL"
+                    )
                 )

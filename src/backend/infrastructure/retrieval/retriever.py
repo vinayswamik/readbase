@@ -6,17 +6,13 @@ import re
 from pathlib import Path
 from typing import Any
 
-import chromadb
 from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
 from chromadb.utils.embedding_functions.onnx_mini_lm_l6_v2 import ONNXMiniLM_L6_V2
 
-from src.backend.config.settings import (
-    CHROMA_DIR,
-    DEFAULT_TOP_K,
-    EMBEDDING_CACHE_DIR,
-    INDEX_DIR,
-    WORKSPACES_DIR,
-)
+from src.backend.config.settings import DEFAULT_TOP_K, EMBEDDING_CACHE_DIR
+from src.backend.infrastructure.storage.chroma_clients import get_chroma_client
+from src.backend.infrastructure.storage.context import StorageContext
+from src.backend.infrastructure.storage.resolver import resolve_storage
 
 # Token pattern for code-ish search. It captures identifiers like create_session
 # and numbers, then helper functions split/normalize those tokens further.
@@ -62,8 +58,10 @@ def split_identifier(token: str) -> list[str]:
     return [part for part in split_parts if part and part != token]
 
 
-# Build a persistent ChromaDB index from repo chunks. Chroma's embedding function
-# turns code text into semantic vectors; we still store raw text for citations.
+def _storage_for_workspace(workspace_id: str | None) -> StorageContext:
+    return resolve_storage(workspace_id)
+
+
 def build_index(
     chunks: list[dict],
     repo_url: str,
@@ -71,7 +69,8 @@ def build_index(
     file_count: int,
     workspace_id: str | None = None,
 ) -> dict:
-    collection = get_repo_collection(repo_id, workspace_id=workspace_id, recreate=True)
+    storage = _storage_for_workspace(workspace_id)
+    collection = get_repo_collection(repo_id, storage=storage, recreate=True)
     if chunks:
         ids = [chunk["id"] for chunk in chunks]
         documents = [chunk["text"] for chunk in chunks]
@@ -87,8 +86,6 @@ def build_index(
             }
             for chunk in chunks
         ]
-        # Chroma stores ids, source text, metadata, and vectors together. Upsert
-        # means the same chunk id can be re-indexed without duplicate records.
         collection.upsert(
             ids=ids,
             documents=documents,
@@ -96,7 +93,6 @@ def build_index(
             embeddings=embed_texts([embedding_text(chunk) for chunk in chunks]),
         )
 
-    # The JSON manifest is now only lightweight metadata. Chunks live in Chroma.
     return {
         "repo_id": repo_id,
         "workspace_id": workspace_id,
@@ -109,7 +105,8 @@ def build_index(
 
 
 def build_jira_index(chunks: list[dict], workspace_id: str) -> dict:
-    collection = get_repo_collection(jira_collection_id(), workspace_id=workspace_id, recreate=True)
+    storage = _storage_for_workspace(workspace_id)
+    collection = get_repo_collection(jira_collection_id(), storage=storage, recreate=True)
     if chunks:
         collection.upsert(
             ids=[chunk["id"] for chunk in chunks],
@@ -146,7 +143,8 @@ def build_jira_index(chunks: list[dict], workspace_id: str) -> dict:
 
 
 def build_slack_index(chunks: list[dict], workspace_id: str) -> dict:
-    collection = get_repo_collection(slack_collection_id(), workspace_id=workspace_id, recreate=True)
+    storage = _storage_for_workspace(workspace_id)
+    collection = get_repo_collection(slack_collection_id(), storage=storage, recreate=True)
     if chunks:
         collection.upsert(
             ids=[chunk["id"] for chunk in chunks],
@@ -184,7 +182,8 @@ def build_slack_index(chunks: list[dict], workspace_id: str) -> dict:
 
 
 def build_linear_index(chunks: list[dict], workspace_id: str) -> dict:
-    collection = get_repo_collection(linear_collection_id(), workspace_id=workspace_id, recreate=True)
+    storage = _storage_for_workspace(workspace_id)
+    collection = get_repo_collection(linear_collection_id(), storage=storage, recreate=True)
     if chunks:
         collection.upsert(
             ids=[chunk["id"] for chunk in chunks],
@@ -211,8 +210,37 @@ def build_linear_index(chunks: list[dict], workspace_id: str) -> dict:
     return source_index_manifest(linear_collection_id(), workspace_id, "linear://workspace", chunks)
 
 
+def build_notion_index(chunks: list[dict], workspace_id: str) -> dict:
+    storage = _storage_for_workspace(workspace_id)
+    collection = get_repo_collection(notion_collection_id(), storage=storage, recreate=True)
+    if chunks:
+        collection.upsert(
+            ids=[chunk["id"] for chunk in chunks],
+            documents=[chunk["text"] for chunk in chunks],
+            metadatas=[
+                {
+                    "source_type": "notion",
+                    "workspace_id": workspace_id,
+                    "path": chunk["path"],
+                    "start_line": 1,
+                    "end_line": 1,
+                    "source_url": chunk.get("source_url", ""),
+                    "notion_workspace_id": chunk.get("notion_workspace_id", ""),
+                    "database_id": chunk.get("database_id", ""),
+                    "page_id": chunk.get("page_id", ""),
+                    "item_type": chunk.get("item_type", ""),
+                    "item_id": chunk.get("item_id", ""),
+                }
+                for chunk in chunks
+            ],
+            embeddings=embed_texts([embedding_text(chunk) for chunk in chunks]),
+        )
+    return source_index_manifest(notion_collection_id(), workspace_id, "notion://workspace", chunks)
+
+
 def build_confluence_index(chunks: list[dict], workspace_id: str) -> dict:
-    collection = get_repo_collection(confluence_collection_id(), workspace_id=workspace_id, recreate=True)
+    storage = _storage_for_workspace(workspace_id)
+    collection = get_repo_collection(confluence_collection_id(), storage=storage, recreate=True)
     if chunks:
         collection.upsert(
             ids=[chunk["id"] for chunk in chunks],
@@ -251,46 +279,49 @@ def source_index_manifest(repo_id: str, workspace_id: str, repo_url: str, chunks
     }
 
 
-# Persist lightweight metadata as readable JSON for repo listing and existence checks.
 def save_index(index: dict, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(index, indent=2), encoding="utf-8")
 
 
-# Check whether the manifest exists before trying to query Chroma.
+def index_manifest_path(storage: StorageContext, repo_id: str) -> Path | None:
+    for indexes_dir in storage.index_search_dirs():
+        path = indexes_dir / f"{repo_id}.json"
+        if path.exists():
+            return path
+    return None
+
+
 def index_exists(repo_id: str, workspace_id: str | None = None) -> bool:
-    return (index_dir_for_workspace(workspace_id) / f"{repo_id}.json").exists()
+    storage = _storage_for_workspace(workspace_id)
+    return index_manifest_path(storage, repo_id) is not None
 
 
-# Load a previously saved repo manifest when the user asks a question.
 def load_index(repo_id: str, workspace_id: str | None = None) -> dict:
-    return json.loads(
-        (index_dir_for_workspace(workspace_id) / f"{repo_id}.json").read_text(
-            encoding="utf-8"
-        )
-    )
+    storage = _storage_for_workspace(workspace_id)
+    path = index_manifest_path(storage, repo_id)
+    if path is None:
+        raise FileNotFoundError(f"Index manifest not found for repo_id={repo_id}")
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
-# Delete the Chroma collection for a repo. Refresh uses this so old chunks do not
-# survive when a repository is re-cloned and re-indexed.
 def delete_index(repo_id: str, workspace_id: str | None = None) -> None:
+    storage = _storage_for_workspace(workspace_id)
     try:
-        get_chroma_client().delete_collection(collection_name(repo_id, workspace_id=workspace_id))
+        get_chroma_client(storage.chroma_dir).delete_collection(
+            collection_name(repo_id, workspace_id=workspace_id)
+        )
     except Exception:
-        # Chroma raises when the collection does not exist; refresh should remain idempotent.
         return
 
 
-# Retrieve the best chunks for a question. Chroma runs nearest-neighbor search
-# over the stored chunk embeddings and returns source documents + metadata.
 def search(index: dict, question: str, top_k: int = DEFAULT_TOP_K) -> list[dict]:
     if not tokenize(question):
         return []
 
-    collection = get_repo_collection(
-        index["repo_id"],
-        workspace_id=index.get("workspace_id"),
-    )
+    workspace_id = index.get("workspace_id") or None
+    storage = _storage_for_workspace(workspace_id)
+    collection = get_repo_collection(index["repo_id"], storage=storage)
     result = collection.query(
         query_embeddings=embed_texts([question]),
         n_results=max(1, top_k),
@@ -315,10 +346,15 @@ def search_confluence(workspace_id: str, question: str, top_k: int = DEFAULT_TOP
     return search_workspace_source(confluence_collection_id(), workspace_id, question, top_k)
 
 
+def search_notion(workspace_id: str, question: str, top_k: int = DEFAULT_TOP_K) -> list[dict]:
+    return search_workspace_source(notion_collection_id(), workspace_id, question, top_k)
+
+
 def search_workspace_source(collection_id_value: str, workspace_id: str, question: str, top_k: int) -> list[dict]:
     if not tokenize(question):
         return []
-    collection = get_repo_collection(collection_id_value, workspace_id=workspace_id)
+    storage = _storage_for_workspace(workspace_id)
+    collection = get_repo_collection(collection_id_value, storage=storage)
     try:
         result = collection.query(
             query_embeddings=embed_texts([question]),
@@ -346,28 +382,25 @@ def confluence_collection_id() -> str:
     return "__confluence__"
 
 
-# Chroma keeps a persistent SQLite/vector index under .readbase/chroma.
-def get_chroma_client() -> chromadb.PersistentClient:
-    CHROMA_DIR.mkdir(parents=True, exist_ok=True)
-    return chromadb.PersistentClient(path=str(CHROMA_DIR))
+def notion_collection_id() -> str:
+    return "__notion__"
 
 
-# Collection names are separate from repo ids because Chroma collection names
-# have validation rules. A digest keeps names short and collision-resistant.
 def collection_name(repo_id: str, workspace_id: str | None = None) -> str:
     collection_key = f"{workspace_id}:{repo_id}" if workspace_id else repo_id
     digest = hashlib.sha1(collection_key.encode("utf-8")).hexdigest()[:16]
     return f"readbase_{digest}"
 
 
-# Get or recreate the Chroma collection for one repo.
 def get_repo_collection(
     repo_id: str,
+    *,
+    storage: StorageContext,
     workspace_id: str | None = None,
     recreate: bool = False,
 ):
-    client = get_chroma_client()
-    name = collection_name(repo_id, workspace_id=workspace_id)
+    client = get_chroma_client(storage.chroma_dir)
+    name = collection_name(repo_id, workspace_id=workspace_id or storage.workspace_id)
     if recreate:
         try:
             client.delete_collection(name)
@@ -377,33 +410,20 @@ def get_repo_collection(
         name=name,
         metadata={
             "repo_id": repo_id,
-            "workspace_id": workspace_id or "",
+            "workspace_id": (workspace_id or storage.workspace_id) or "",
             "hnsw:space": "cosine",
         },
     )
 
 
-def index_dir_for_workspace(workspace_id: str | None = None) -> Path:
-    if not workspace_id:
-        return INDEX_DIR
-    index_dir = WORKSPACES_DIR / workspace_id / "indexes"
-    index_dir.mkdir(parents=True, exist_ok=True)
-    return index_dir
-
-
-# Include file path in the text that gets embedded because paths encode useful
-# code meaning like "auth/session.py" or "api/routes".
 def embedding_text(chunk: dict) -> str:
     return f"file: {chunk['path']}\n\n{chunk['text']}"
 
 
-# Small wrapper keeps Chroma's embedding function in one place.
 def embed_texts(texts: list[str]) -> list[list[float]]:
     return [[float(value) for value in vector] for vector in EMBEDDING_FUNCTION(texts)]
 
 
-# Turn Chroma's nested query result into the flat SourceMatch shape expected by
-# the answerer and frontend.
 def normalize_chroma_result(result: dict[str, Any]) -> list[dict]:
     ids = first_result_list(result.get("ids"))
     documents = first_result_list(result.get("documents"))
@@ -449,8 +469,6 @@ def normalize_chroma_result(result: dict[str, Any]) -> list[dict]:
     return matches
 
 
-# Chroma returns results as list-per-query. We send one query at a time, so the
-# first nested list contains all matches.
 def first_result_list(value: Any) -> list:
     if not value:
         return []

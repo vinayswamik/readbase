@@ -9,6 +9,7 @@ from src.backend.api.auth import require_authenticated_user
 from src.backend.api.errors import service_error_to_http
 from src.backend.api.schemas import GitlabConnectionResponse, GitlabProjectsResponse
 from src.backend.application.services.auth_service import SESSION_SECURE_COOKIE
+from src.backend.application.services.connectors.oauth_core import oauth_states_match
 from src.backend.application.services.exceptions import ServiceError
 from src.backend.application.services.gitlab_service import (
     GITLAB_OAUTH_STATE_TTL_SECONDS,
@@ -47,7 +48,7 @@ def complete_gitlab_connection(
 ) -> RedirectResponse:
     redirect = RedirectResponse(url="/?gitlab_connected=1", status_code=303)
     redirect.delete_cookie(key=GITLAB_STATE_COOKIE_NAME, path="/")
-    if not code or not state or not gitlab_state_cookie or state != gitlab_state_cookie:
+    if not code or not oauth_states_match(state, gitlab_state_cookie):
         return RedirectResponse(url="/?gitlab_error=invalid_state", status_code=303)
     try:
         exchange_gitlab_code_for_connection(user.user_id, code)

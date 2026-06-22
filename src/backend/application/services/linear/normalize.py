@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime
+from typing import Any
 
-from src.backend.infrastructure.models import WorkspaceLinearSource, utc_now
+from src.backend.infrastructure.models import utc_now
 
 
-def normalize_issues(source: WorkspaceLinearSource, issues: list[dict]) -> list[dict]:
+def normalize_issues(source: dict[str, Any], issues: list[dict]) -> list[dict]:
     rows: list[dict] = []
     for issue in issues:
         issue_id = str(issue.get("id") or "")
@@ -24,12 +25,12 @@ def normalize_issues(source: WorkspaceLinearSource, issues: list[dict]) -> list[
     return rows
 
 
-def item(source: WorkspaceLinearSource, issue_id: str, issue_key: str, item_type: str, item_id: str, title: str, body: str, url: str, updated_at: object) -> dict:
+def item(source: dict[str, Any], issue_id: str, issue_key: str, item_type: str, item_id: str, title: str, body: str, url: str, updated_at: object) -> dict:
     return {
-        "source_id": source.source_id,
-        "workspace_id": source.workspace_id,
-        "linear_team_id": source.linear_team_id,
-        "linear_project_id": source.linear_project_id,
+        "source_id": str(source.get("source_id") or ""),
+        "workspace_id": str(source.get("workspace_id") or ""),
+        "linear_team_id": str(source.get("linear_team_id") or ""),
+        "linear_project_id": source.get("linear_project_id"),
         "issue_id": issue_id,
         "issue_key": issue_key,
         "item_type": item_type,

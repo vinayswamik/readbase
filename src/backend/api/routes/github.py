@@ -7,6 +7,7 @@ from src.backend.api.auth import require_authenticated_user
 from src.backend.api.errors import service_error_to_http
 from src.backend.api.schemas import GithubConnectionResponse, GithubRepositoriesResponse
 from src.backend.application.services.auth_service import SESSION_SECURE_COOKIE
+from src.backend.application.services.connectors.oauth_core import oauth_states_match
 from src.backend.application.services.exceptions import ServiceError
 from src.backend.application.services.github_service import (
     GITHUB_OAUTH_STATE_TTL_SECONDS,
@@ -51,7 +52,7 @@ def complete_github_connection(
 ) -> RedirectResponse:
     redirect = RedirectResponse(url="/?github_connected=1", status_code=303)
     redirect.delete_cookie(key=GITHUB_STATE_COOKIE_NAME, path="/")
-    if not code or not state or not github_state_cookie or state != github_state_cookie:
+    if not code or not oauth_states_match(state, github_state_cookie):
         redirect = RedirectResponse(url="/?github_error=invalid_state", status_code=303)
         redirect.delete_cookie(key=GITHUB_STATE_COOKIE_NAME, path="/")
         return redirect

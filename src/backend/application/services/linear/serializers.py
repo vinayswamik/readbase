@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from src.backend.infrastructure.models import LinearUserConnection, WorkspaceLinearSource
+import json
+
+from src.backend.infrastructure.models import LinearUserConnection, OrgSource
 
 
 def public_connection(connection: LinearUserConnection) -> dict:
@@ -16,16 +18,34 @@ def public_connection(connection: LinearUserConnection) -> dict:
     }
 
 
-def public_source(source: WorkspaceLinearSource, user_access: str = "unknown") -> dict:
+def _metadata(source: OrgSource) -> dict:
+    raw = source.metadata_json or ""
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def public_source(
+    source: OrgSource,
+    *,
+    workspace_id: str,
+    user_access: str = "unknown",
+    sync_owner_user_id: str | None = None,
+) -> dict:
+    metadata = _metadata(source)
     return {
         "source_id": source.source_id,
-        "workspace_id": source.workspace_id,
-        "linear_team_id": source.linear_team_id,
-        "team_name": source.team_name,
-        "linear_project_id": source.linear_project_id,
-        "project_name": source.project_name,
+        "workspace_id": workspace_id,
+        "linear_team_id": str(metadata.get("linear_team_id") or ""),
+        "team_name": str(metadata.get("team_name") or ""),
+        "linear_project_id": metadata.get("linear_project_id"),
+        "project_name": metadata.get("project_name"),
         "added_by_user_id": source.added_by_user_id,
-        "sync_owner_user_id": source.sync_owner_user_id,
+        "sync_owner_user_id": sync_owner_user_id or source.sync_owner_user_id or source.added_by_user_id,
         "sync_status": source.sync_status,
         "sync_error": source.sync_error,
         "last_synced_at": iso(source.last_synced_at),

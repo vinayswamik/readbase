@@ -43,6 +43,24 @@ class GitlabUserConnection(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
 
+class TeamsUserConnection(Base):
+    __tablename__ = "teams_user_connections"
+
+    connection_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    microsoft_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    tenant_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    user_principal_name: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    mail: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    access_token_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    refresh_token_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    scopes: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    connected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+
 class LinearUserConnection(Base):
     __tablename__ = "linear_user_connections"
 
@@ -208,6 +226,79 @@ class ConfluenceVisibilityCache(Base):
     cache_row_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, index=True)
     cloud_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    page_id: Mapped[str] = mapped_column(String(96), nullable=False, index=True)
+    can_access: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+
+
+class NotionUserConnection(Base):
+    __tablename__ = "notion_user_connections"
+
+    connection_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    notion_workspace_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    workspace_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    workspace_icon: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    bot_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    owner_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    owner_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    access_token_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    connected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+
+class WorkspaceNotionSource(Base):
+    __tablename__ = "workspace_notion_sources"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "database_id", name="uq_workspace_notion_database"),
+    )
+
+    source_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(96), ForeignKey("workspaces.workspace_id", ondelete="CASCADE"), nullable=False, index=True)
+    notion_workspace_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    database_id: Mapped[str] = mapped_column(String(96), nullable=False, index=True)
+    database_title: Mapped[str] = mapped_column(String(255), nullable=False)
+    added_by_user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.user_id"), nullable=False, index=True)
+    sync_owner_user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.user_id"), nullable=False, index=True)
+    sync_status: Mapped[str] = mapped_column(String(32), default="idle", nullable=False)
+    sync_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+
+class NotionIndexedItem(Base):
+    __tablename__ = "notion_indexed_items"
+    __table_args__ = (
+        UniqueConstraint("source_id", "item_type", "item_id", name="uq_notion_indexed_item"),
+    )
+
+    item_row_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source_id: Mapped[str] = mapped_column(String(96), ForeignKey("workspace_notion_sources.source_id", ondelete="CASCADE"), nullable=False, index=True)
+    workspace_id: Mapped[str] = mapped_column(String(96), nullable=False, index=True)
+    notion_workspace_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    database_id: Mapped[str] = mapped_column(String(96), nullable=False, index=True)
+    page_id: Mapped[str] = mapped_column(String(96), nullable=False, index=True)
+    item_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    item_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    source_url: Mapped[str] = mapped_column(String(1000), nullable=False)
+    remote_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    indexed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class NotionVisibilityCache(Base):
+    __tablename__ = "notion_visibility_cache"
+    __table_args__ = (
+        UniqueConstraint("user_id", "page_id", name="uq_notion_visibility_cache"),
+    )
+
+    cache_row_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, index=True)
     page_id: Mapped[str] = mapped_column(String(96), nullable=False, index=True)
     can_access: Mapped[bool] = mapped_column(Boolean, nullable=False)
     checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)

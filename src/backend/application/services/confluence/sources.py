@@ -1,14 +1,23 @@
 from __future__ import annotations
 
+import json
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 
 from src.backend.application.services.exceptions import PermissionDeniedError, ResourceNotFoundError, ValidationError
 from src.backend.application.services.workspace_service import user_can_access_workspace, user_can_manage_workspace_connectors
 from src.backend.infrastructure.database import session_scope
-from src.backend.infrastructure.models import ConfluenceUserSite, Workspace, WorkspaceConfluenceSource, utc_now
+from src.backend.infrastructure.models import (
+    ConfluenceIndexedItem,
+    ConfluenceUserSite,
+    OrgSource,
+    Workspace,
+    WorkspaceConfluenceSource,
+    WorkspaceSourceSubscription,
+    utc_now,
+)
 
 from .auth import get_valid_confluence_access_token
 from .http import confluence_request
@@ -37,13 +46,36 @@ def list_visible_confluence_spaces(user_id: str, query: str = "") -> list[dict]:
 
 def list_workspace_confluence_sources(workspace_id: str, user_id: str) -> list[dict]:
     with session_scope() as session:
+        normalized_workspace_id = workspace_id.strip()
         sources = session.scalars(
-            select(WorkspaceConfluenceSource)
-            .where(WorkspaceConfluenceSource.workspace_id == workspace_id.strip())
-            .order_by(WorkspaceConfluenceSource.created_at.desc())
+            select(OrgSource)
+            .join(WorkspaceSourceSubscription, WorkspaceSourceSubscription.source_id == OrgSource.source_id)
+            .where(
+                WorkspaceSourceSubscription.workspace_id == normalized_workspace_id,
+                OrgSource.provider == "confluence",
+            )
+            .order_by(OrgSource.created_at.desc())
         ).all()
         connected_clouds = {site.cloud_id for site in session.scalars(select(ConfluenceUserSite).where(ConfluenceUserSite.user_id == user_id)).all()}
-        return [public_source(source, user_access=("connected" if source.cloud_id in connected_clouds else "connect_confluence")) for source in sources]
+        sync_owners = {
+            row.source_id: row.sync_owner_user_id
+            for row in session.scalars(
+                select(WorkspaceConfluenceSource).where(WorkspaceConfluenceSource.source_id.in_([source.source_id for source in sources]))
+            ).all()
+        }
+        return [
+            public_source(
+                source,
+                workspace_id=normalized_workspace_id,
+                sync_owner_user_id=sync_owners.get(source.source_id),
+                user_access=(
+                    "connected"
+                    if str(_parse_metadata(source.metadata_json).get("cloud_id") or "") in connected_clouds
+                    else "connect_confluence"
+                ),
+            )
+            for source in sources
+        ]
 
 
 def add_workspace_confluence_source(workspace_id: str, actor_user_id: str, actor_email: str, payload: dict) -> dict:
@@ -58,38 +90,102 @@ def add_workspace_confluence_source(workspace_id: str, actor_user_id: str, actor
         workspace = session.get(Workspace, workspace_id.strip())
         if workspace is None:
             raise ResourceNotFoundError("Workspace not found.")
+        org_id = (workspace.organization_id or workspace.workspace_id).strip()
         site = session.scalar(select(ConfluenceUserSite).where(ConfluenceUserSite.user_id == actor_user_id, ConfluenceUserSite.cloud_id == cloud_id))
         if site is None:
             raise PermissionDeniedError("Connect Confluence with access to this site before adding the space.")
-        source = WorkspaceConfluenceSource(
-            source_id=f"confluence-{uuid4().hex[:16]}",
-            workspace_id=workspace.workspace_id,
-            cloud_id=cloud_id,
-            site_name=site_name,
-            site_url=site_url,
-            space_id=space_id,
-            space_key=space_key,
-            space_name=space_name,
-            added_by_user_id=actor_user_id,
-            sync_owner_user_id=actor_user_id,
-            next_sync_at=utc_now(),
+        external_key = f"{cloud_id}:{space_id}"
+        source = session.scalar(
+            select(OrgSource).where(
+                OrgSource.org_id == org_id,
+                OrgSource.provider == "confluence",
+                OrgSource.external_key == external_key,
+            )
         )
-        session.add(source)
+        if source is None:
+            source = OrgSource(
+                source_id=f"confluence-{uuid4().hex[:16]}",
+                org_id=org_id,
+                provider="confluence",
+                external_key=external_key,
+                display_name=f"{site_name} {space_key}",
+                source_url=site_url,
+                metadata_json=json.dumps(
+                    {
+                        "cloud_id": cloud_id,
+                        "site_name": site_name,
+                        "site_url": site_url,
+                        "space_id": space_id,
+                        "space_key": space_key,
+                        "space_name": space_name,
+                    },
+                    sort_keys=True,
+                ),
+                added_by_user_id=actor_user_id,
+                sync_owner_user_id=actor_user_id,
+                next_sync_at=utc_now(),
+            )
+            session.add(source)
+        legacy = session.get(WorkspaceConfluenceSource, source.source_id)
+        if legacy is None:
+            session.add(
+                WorkspaceConfluenceSource(
+                    source_id=source.source_id,
+                    workspace_id=workspace.workspace_id,
+                    cloud_id=cloud_id,
+                    site_name=site_name,
+                    site_url=site_url,
+                    space_id=space_id,
+                    space_key=space_key,
+                    space_name=space_name,
+                    added_by_user_id=actor_user_id,
+                    sync_owner_user_id=actor_user_id,
+                    next_sync_at=utc_now(),
+                )
+            )
+        session.add(
+            WorkspaceSourceSubscription(
+                workspace_id=workspace.workspace_id,
+                source_id=source.source_id,
+                added_by_user_id=actor_user_id,
+            )
+        )
         try:
             session.flush()
         except IntegrityError as exc:
             raise ValidationError("Confluence space is already connected to this workspace.") from exc
-        return public_source(source, user_access="connected")
+        return public_source(source, workspace_id=workspace.workspace_id, user_access="connected")
 
 
 def remove_workspace_confluence_source(workspace_id: str, source_id: str, actor_user_id: str, actor_email: str) -> dict:
     require_connector_manager(actor_user_id, actor_email, workspace_id)
     with session_scope() as session:
-        source = session.get(WorkspaceConfluenceSource, source_id.strip())
-        if source is None or source.workspace_id != workspace_id.strip():
+        normalized_workspace_id = workspace_id.strip()
+        source = session.scalar(
+            select(OrgSource).where(
+                OrgSource.source_id == source_id.strip(),
+                OrgSource.provider == "confluence",
+            )
+        )
+        subscription = session.scalar(
+            select(WorkspaceSourceSubscription).where(
+                WorkspaceSourceSubscription.workspace_id == normalized_workspace_id,
+                WorkspaceSourceSubscription.source_id == source_id.strip(),
+            )
+        )
+        if source is None or subscription is None:
             raise ResourceNotFoundError("Confluence source not found.")
-        public = public_source(source, user_access="unknown")
-        session.delete(source)
+        public = public_source(source, workspace_id=normalized_workspace_id, user_access="unknown")
+        session.delete(subscription)
+        has_remaining = session.scalar(
+            select(WorkspaceSourceSubscription.subscription_id)
+            .where(WorkspaceSourceSubscription.source_id == source.source_id)
+            .limit(1)
+        )
+        if has_remaining is None:
+            session.execute(delete(ConfluenceIndexedItem).where(ConfluenceIndexedItem.source_id == source.source_id))
+            session.execute(delete(WorkspaceConfluenceSource).where(WorkspaceConfluenceSource.source_id == source.source_id))
+            session.delete(source)
         return public
 
 
@@ -105,3 +201,13 @@ def required_payload(payload: dict, key: str) -> str:
     if not value:
         raise ValidationError(f"{key} is required.")
     return value
+
+
+def _parse_metadata(raw: str | None) -> dict:
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}

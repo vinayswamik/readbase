@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { fetchJson, getErrorMessage, postJson } from "./api";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
+import { isMockApi } from "./mock/dev";
+import { useMockRoute } from "./mock/useMockRoute";
 import type { AuthUser, SessionResponse } from "./types";
 
 const SESSION_CHECK_INTERVAL_MS = 60_000;
@@ -13,10 +15,19 @@ export function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const userRef = useRef<AuthUser | null>(null);
+  const mockMode = isMockApi();
+  const [mockRoute, navigateMock, replaceMockRoute] = useMockRoute();
 
   useEffect(() => {
     userRef.current = user;
   }, [user]);
+
+  useEffect(() => {
+    if (!mockMode || isLoadingSession || user || mockRoute.screen === "login") {
+      return;
+    }
+    replaceMockRoute({ screen: "login" });
+  }, [mockMode, isLoadingSession, user, mockRoute.screen, replaceMockRoute]);
 
   useEffect(() => {
     void loadSession();
@@ -59,7 +70,7 @@ export function App() {
       const session = await fetchJson<SessionResponse>("/api/auth/session");
       if (session.authenticated) {
         setUser((currentUser) =>
-          areSameUser(currentUser, session.user) ? currentUser : session.user,
+          areSameUser(currentUser, session.user ?? null) ? currentUser : session.user ?? null,
         );
         if (!backgroundCheck) {
           setError(readAuthErrorFromUrl());
@@ -86,9 +97,27 @@ export function App() {
     }
   }
 
-  async function handleGoogleLogin(portal: "admin" | "member") {
+  async function handleLogin() {
     setIsSubmitting(true);
-    window.location.assign(`/api/auth/google/start?portal=${portal}`);
+    if (isMockApi()) {
+      try {
+        const session = await postJson<Record<string, never>, SessionResponse>(
+          "/api/auth/mock-login",
+          {},
+        );
+        setUser(session.user ?? null);
+        setError(null);
+        if (mockMode) {
+          navigateMock({ screen: "workspaces" });
+        }
+      } catch (loginError) {
+        setError(getErrorMessage(loginError));
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+    window.location.assign("/api/auth/start");
   }
 
   async function handleLogout() {
@@ -97,6 +126,9 @@ export function App() {
       await postJson<undefined, SessionResponse>("/api/auth/logout");
       setUser(null);
       setError(null);
+      if (mockMode) {
+        navigateMock({ screen: "login" });
+      }
     } catch (logoutError) {
       setError(getErrorMessage(logoutError));
     } finally {
@@ -120,11 +152,13 @@ export function App() {
         loading={isSubmitting}
         onLogout={handleLogout}
         onSessionExpired={handleSessionExpired}
+        mockRoute={mockMode ? mockRoute : undefined}
+        onMockNavigate={mockMode ? navigateMock : undefined}
       />
     );
   }
 
-  return <LoginPage loading={isSubmitting} error={error} onLogin={handleGoogleLogin} />;
+  return <LoginPage loading={isSubmitting} error={error} onLogin={handleLogin} />;
 }
 
 function areSameUser(currentUser: AuthUser | null, nextUser: AuthUser | null | undefined): boolean {
@@ -134,8 +168,7 @@ function areSameUser(currentUser: AuthUser | null, nextUser: AuthUser | null | u
   return (
     currentUser.id === nextUser.id &&
     currentUser.email === nextUser.email &&
-    currentUser.name === nextUser.name &&
-    currentUser.role === nextUser.role
+    currentUser.name === nextUser.name
   );
 }
 
@@ -147,8 +180,5 @@ function readAuthErrorFromUrl(): string | null {
   }
   url.searchParams.delete("auth_error");
   window.history.replaceState({}, "", url.pathname + url.search);
-  if (authError === "admin_not_approved") {
-    return "This Google account is not approved for admin login.";
-  }
-  return "Google sign-in was not completed. Please try again.";
+  return "Organization sign-in was not completed. Please try again.";
 }
