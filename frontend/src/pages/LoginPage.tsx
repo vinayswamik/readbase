@@ -34,26 +34,26 @@ export function LoginPage({
             <h1 id="login-title">Sign in to readbase</h1>
           </header>
 
-        <div className="provider-grid">
-          <button
-            className="login-topbar-button"
-            type="button"
-            onClick={onLogin}
-            disabled={loading}
-          >
-            {loading ? "Signing in..." : "Sign in with your organization"}
-          </button>
-        </div>
+          <div className="provider-grid">
+            <button
+              className="login-topbar-button"
+              type="button"
+              onClick={onLogin}
+              disabled={loading}
+            >
+              {loading ? "Signing in..." : "Sign in with your organization"}
+            </button>
+          </div>
 
-        {error ? (
-          <p className="error-note" role="status" aria-live="polite">
-            {error}
+          {error ? (
+            <p className="error-note" role="status" aria-live="polite">
+              {error}
+            </p>
+          ) : null}
+
+          <p className="footer-note">
+            Your organization&apos;s identity provider keeps your account secure.
           </p>
-        ) : null}
-
-        <p className="footer-note">
-          Your organization&apos;s identity provider keeps your account secure.
-        </p>
         </section>
       </div>
     </main>

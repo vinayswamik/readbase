@@ -107,7 +107,7 @@ export function createMockStore() {
       return removed;
     },
     leaveWorkspace(workspaceId) {
-      return deleteWorkspace(workspaceId);
+      return this.deleteWorkspace(workspaceId);
     },
     listInvites() {
       return {
