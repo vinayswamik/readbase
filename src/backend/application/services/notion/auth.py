@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import os
 import urllib.parse
 from secrets import token_urlsafe
 from typing import Any
 
 from sqlalchemy import delete, select
 
-from src.backend.application.services.auth_service import APP_BASE_URL
+from src.backend.application.services.connectors.oauth_core import build_oauth_callback_url
 from src.backend.application.services.exceptions import PermissionDeniedError, ValidationError
 from src.backend.application.services.jira.crypto import decrypt_token, encrypt_token
 from src.backend.infrastructure.database import session_scope
@@ -23,32 +22,20 @@ def create_notion_oauth_state() -> str:
 
 
 def notion_callback_url() -> str:
-    configured = os.getenv("NOTION_REDIRECT_URI", "").strip()
-    if configured:
-        require_https_redirect_uri(configured)
-        return configured
-    url = f"{notion_public_base_url()}{NOTION_CALLBACK_PATH}"
-    require_https_redirect_uri(url)
-    return url
+    return build_oauth_callback_url(
+        NOTION_CALLBACK_PATH,
+        redirect_uri_env="NOTION_REDIRECT_URI",
+        base_url_override_env="NOTION_PUBLIC_BASE_URL",
+        require_https=True,
+        connector_label="Notion",
+    )
 
 
 def notion_public_base_url() -> str:
     """Public origin for Notion OAuth (must be https)."""
-    override = os.getenv("NOTION_PUBLIC_BASE_URL", "").strip()
-    if override:
-        return override.rstrip("/")
-    base = APP_BASE_URL.rstrip("/")
-    if base.startswith("http://") and os.getenv("READBASE_SSL_CERTFILE", "").strip():
-        return f"https://{base[len('http://'):]}"
-    return base
+    from src.backend.application.services.connectors.oauth_core import oauth_public_base_url
 
-
-def require_https_redirect_uri(url: str) -> None:
-    if not url.lower().startswith("https://"):
-        raise ValidationError(
-            "Notion requires an HTTPS redirect URI. Set NOTION_REDIRECT_URI to an https callback "
-            "(e.g. https://127.0.0.1:8000/api/me/integrations/notion/callback with local SSL, or an ngrok URL)."
-        )
+    return oauth_public_base_url(base_url_override_env="NOTION_PUBLIC_BASE_URL")
 
 
 def build_notion_authorize_url(state: str) -> str:

@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import logging
+import os
 import ssl
 import urllib.error
 import urllib.parse
@@ -21,10 +22,83 @@ TLS_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 DEFAULT_STATE_TTL_SECONDS = 600
 
 
+def _app_base_url() -> str:
+    return os.getenv("APP_BASE_URL", "http://127.0.0.1:8000").strip().rstrip("/")
+
+
 def oauth_states_match(provided: str | None, expected: str | None) -> bool:
     if provided is None or expected is None:
         return False
     return secrets.compare_digest(provided, expected)
+
+
+def oauth_public_base_url(*, base_url_override_env: str | None = None) -> str:
+    """Public origin for OAuth redirects; upgrades http->https when local SSL is configured."""
+    if base_url_override_env:
+        override = os.getenv(base_url_override_env, "").strip()
+        if override:
+            return override.rstrip("/")
+    base = _app_base_url()
+    if base.startswith("http://") and os.getenv("READBASE_SSL_CERTFILE", "").strip():
+        return f"https://{base[len('http://'):]}"
+    return base
+
+
+def build_oauth_callback_url(
+    callback_path: str,
+    *,
+    redirect_uri_env: str,
+    base_url_override_env: str | None = None,
+    require_https: bool = False,
+    connector_label: str = "OAuth",
+) -> str:
+    configured = os.getenv(redirect_uri_env, "").strip()
+    if configured:
+        if require_https:
+            require_https_redirect_uri(configured, connector_label=connector_label)
+        require_redirect_uri_servable(configured, connector_label=connector_label)
+        return configured
+    url = f"{oauth_public_base_url(base_url_override_env=base_url_override_env)}{callback_path}"
+    if require_https:
+        require_https_redirect_uri(url, connector_label=connector_label)
+    require_redirect_uri_servable(url, connector_label=connector_label)
+    return url
+
+
+def require_https_redirect_uri(url: str, *, connector_label: str = "OAuth") -> None:
+    if not url.lower().startswith("https://"):
+        raise ValidationError(
+            f"{connector_label} requires an HTTPS redirect URI. Set the callback to an https URL "
+            "(e.g. https://127.0.0.1:8000/... with local SSL, or an ngrok URL)."
+        )
+
+
+def require_redirect_uri_servable(url: str, *, connector_label: str = "Slack") -> None:
+    """Reject local HTTPS callback URLs when Readbase is not configured to serve HTTPS."""
+    if not url.lower().startswith("https://"):
+        return
+    if os.getenv("READBASE_SSL_CERTFILE", "").strip():
+        return
+    if _app_base_url().lower().startswith("https://"):
+        return
+    redirect_host = _redirect_uri_host(url)
+    base_host = _redirect_uri_host(_app_base_url())
+    if redirect_host and base_host and redirect_host != base_host and not _local_dev_host(redirect_host):
+        return
+    raise ValidationError(
+        f"{connector_label} redirect URI uses HTTPS but Readbase is not configured for local SSL. "
+        "Run scripts/setup_local_ssl.sh and set READBASE_SSL_* / APP_BASE_URL=https://..., "
+        "or use an HTTP callback (http://127.0.0.1:8000/...) when serving over HTTP."
+    )
+
+
+def _redirect_uri_host(url: str) -> str | None:
+    hostname = urllib.parse.urlparse(url).hostname
+    return hostname.lower() if hostname else None
+
+
+def _local_dev_host(host: str) -> bool:
+    return host in {"127.0.0.1", "localhost", "::1"}
 
 
 @dataclass(frozen=True)

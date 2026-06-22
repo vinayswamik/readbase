@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-import os
 import urllib.parse
 from datetime import timedelta
 
 from sqlalchemy import delete, select
 
-from src.backend.application.services.connectors.oauth_core import create_connector_oauth_start, pkce_challenge
-
-from src.backend.application.services.auth_service import APP_BASE_URL
+from src.backend.application.services.connectors.oauth_core import (
+    build_oauth_callback_url,
+    create_connector_oauth_start,
+    pkce_challenge,
+)
 from src.backend.application.services.exceptions import PermissionDeniedError, ValidationError
 from src.backend.application.services.jira.crypto import decrypt_token, encrypt_token
 from src.backend.infrastructure.database import session_scope
@@ -36,10 +37,11 @@ def create_slack_oauth_state() -> str:
 
 
 def slack_callback_url() -> str:
-    configured = os.getenv("SLACK_REDIRECT_URI", "").strip()
-    if configured:
-        return configured
-    return f"{APP_BASE_URL.rstrip('/')}{SLACK_CALLBACK_PATH}"
+    return build_oauth_callback_url(
+        SLACK_CALLBACK_PATH,
+        redirect_uri_env="SLACK_REDIRECT_URI",
+        connector_label="Slack",
+    )
 
 
 def build_slack_authorize_url(state: str, code_verifier: str) -> str:

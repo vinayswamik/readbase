@@ -7,6 +7,8 @@ from unittest.mock import patch
 from sqlalchemy import select
 
 from src.backend.application.services import slack_service, workspace_service
+from src.backend.application.services.exceptions import ValidationError
+from src.backend.application.services.slack.auth import slack_callback_url
 from src.backend.application.services.question_service import ask_repository_question
 from src.backend.application.services.slack.normalize import normalize_messages
 from src.backend.infrastructure import database
@@ -307,6 +309,52 @@ class SlackServiceTests(unittest.TestCase):
         self.assertIn("code_challenge=", url)
         self.assertIn("code_challenge_method=S256", url)
         self.assertIn("state=state-token", url)
+
+    def test_slack_callback_url_defaults_to_app_base_url(self):
+        env = {
+            "APP_BASE_URL": "http://127.0.0.1:8000",
+            "SLACK_REDIRECT_URI": "",
+            "READBASE_SSL_CERTFILE": "",
+        }
+        with patch.dict("os.environ", env, clear=False):
+            self.assertEqual(
+                slack_callback_url(),
+                "http://127.0.0.1:8000/api/me/integrations/slack/callback",
+            )
+
+    def test_slack_callback_url_auto_upgrades_when_local_ssl_configured(self):
+        env = {
+            "APP_BASE_URL": "http://127.0.0.1:8000",
+            "READBASE_SSL_CERTFILE": "certs/readbase-local.pem",
+            "SLACK_REDIRECT_URI": "",
+        }
+        with patch.dict("os.environ", env, clear=False):
+            self.assertEqual(
+                slack_callback_url(),
+                "https://127.0.0.1:8000/api/me/integrations/slack/callback",
+            )
+
+    def test_slack_callback_url_rejects_https_without_local_ssl(self):
+        env = {
+            "APP_BASE_URL": "http://127.0.0.1:8000",
+            "SLACK_REDIRECT_URI": "https://127.0.0.1:8000/api/me/integrations/slack/callback",
+            "READBASE_SSL_CERTFILE": "",
+        }
+        with patch.dict("os.environ", env, clear=False):
+            with self.assertRaises(ValidationError):
+                slack_callback_url()
+
+    def test_slack_callback_url_allows_external_https_tunnel(self):
+        env = {
+            "APP_BASE_URL": "http://127.0.0.1:8000",
+            "SLACK_REDIRECT_URI": "https://example.ngrok.app/api/me/integrations/slack/callback",
+            "READBASE_SSL_CERTFILE": "",
+        }
+        with patch.dict("os.environ", env, clear=False):
+            self.assertEqual(
+                slack_callback_url(),
+                "https://example.ngrok.app/api/me/integrations/slack/callback",
+            )
 
     def test_link_workspace_slack_team_rejects_duplicate(self):
         workspace = workspace_service.create_workspace("admin-1", "Demo", owner_email="admin@example.com")
