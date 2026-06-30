@@ -1,7 +1,7 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 
-import { ConnectorDisconnectDialog } from "./ConnectorDisconnectDialog";
 import { ConnectorLogo } from "./ConnectorLogo";
+import { confirmConnectorDisconnect } from "./connectorBrowserConfirm";
 import { JiraConnectorBody } from "./JiraConnectorBody";
 import { SlackConnectorBody } from "./SlackConnectorBody";
 import { KnowledgeConnectorBody } from "./KnowledgeConnectorBody";
@@ -14,8 +14,6 @@ export function ConnectorSetupModal(props: ConnectorSetupModalProps) {
   repoUrl,
   refreshRepo,
   indexing,
-  status,
-  error,
   githubConnection,
   githubRepositories,
   githubRepositoryQuery,
@@ -73,14 +71,12 @@ export function ConnectorSetupModal(props: ConnectorSetupModalProps) {
   onJiraProjectQueryChange,
   onJiraProjectSearch,
   onAddJiraProject,
-  onSyncJiraSource,
   onRemoveJiraSource,
     onSlackConnect,
     onSlackDisconnect,
     onSlackUnlinkTeam,
     onSlackChannelQueryChange,
   onAddSlackChannel,
-  onSyncSlackSource,
   onRemoveSlackSource,
   onLinearConnect,
   onLinearDisconnect,
@@ -104,20 +100,16 @@ export function ConnectorSetupModal(props: ConnectorSetupModalProps) {
   onSyncNotionSource,
   onRemoveNotionSource,
   onClose,
+  onRequestClose,
 } = props;
-  const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
-  const pendingDisconnectRef = useRef<(() => void | Promise<void>) | null>(null);
+  const requestClose = onRequestClose ?? onClose;
 
-  function requestDisconnect(action: () => void | Promise<void>) {
-    pendingDisconnectRef.current = action;
-    setDisconnectOpen(true);
-  }
-
-  async function confirmDisconnect() {
-    const action = pendingDisconnectRef.current;
-    if (!action) {
-      setDisconnectOpen(false);
+  async function requestDisconnect(action: () => void | Promise<void>) {
+    if (disconnecting) {
+      return;
+    }
+    if (!confirmConnectorDisconnect(connector.name)) {
       return;
     }
     setDisconnecting(true);
@@ -125,8 +117,6 @@ export function ConnectorSetupModal(props: ConnectorSetupModalProps) {
       await action();
     } finally {
       setDisconnecting(false);
-      setDisconnectOpen(false);
-      pendingDisconnectRef.current = null;
     }
   }
 
@@ -150,7 +140,6 @@ export function ConnectorSetupModal(props: ConnectorSetupModalProps) {
     (isRepoConnector && Boolean(repoConnection?.connected)) ||
     (isJira && Boolean(jiraConnection?.connected)) ||
     (isSlack && Boolean(slackTeams.length)) ||
-    (isJira && Boolean(jiraConnection?.connected)) ||
     (isLinear && Boolean(linearConnection?.connected)) ||
     (isConfluence && Boolean(confluenceConnection?.connected)) ||
     (isNotion && Boolean(notionConnection?.connected));
@@ -172,16 +161,7 @@ export function ConnectorSetupModal(props: ConnectorSetupModalProps) {
               : null;
 
   return (
-    <div
-      className="connector-modal-backdrop connector-modal-backdrop-front"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
-    >
-      <div className="connector-modal" role="dialog" aria-modal="true" aria-labelledby="connector-modal-heading">
+    <>
         <header className="connector-modal-header">
           <div className="connector-modal-header-left">
             {isConnected && disconnectAction && !isRepoConnector ? (
@@ -189,7 +169,7 @@ export function ConnectorSetupModal(props: ConnectorSetupModalProps) {
                 type="button"
                 className="connector-disconnect-button"
                 disabled={linearLoading || confluenceLoading || notionLoading || disconnecting}
-                onClick={() => requestDisconnect(disconnectAction)}
+                onClick={() => void requestDisconnect(disconnectAction)}
               >
                 Disconnect
               </button>
@@ -201,7 +181,7 @@ export function ConnectorSetupModal(props: ConnectorSetupModalProps) {
               <h2 id="connector-modal-heading">{connector.name}</h2>
             </div>
           </div>
-          <button type="button" className="connector-close-button" aria-label={`Close ${connector.name}`} onClick={onClose}>
+          <button type="button" className="connector-close-button" aria-label={`Close ${connector.name}`} onClick={requestClose}>
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
             </svg>
@@ -307,7 +287,9 @@ export function ConnectorSetupModal(props: ConnectorSetupModalProps) {
                   className="connector-disconnect-button"
                   disabled={indexing || disconnecting}
                   onClick={() =>
-                    requestDisconnect(isGithub ? onGithubDisconnect : isBitbucket ? onBitbucketDisconnect : onGitlabDisconnect)
+                    void requestDisconnect(
+                      isGithub ? onGithubDisconnect : isBitbucket ? onBitbucketDisconnect : onGitlabDisconnect,
+                    )
                   }
                 >
                   Disconnect
@@ -316,7 +298,7 @@ export function ConnectorSetupModal(props: ConnectorSetupModalProps) {
                 <span />
               )}
               <div className="connector-modal-actions-primary">
-                <button type="button" className="modal-cancel-button" onClick={onClose}>
+                <button type="button" className="modal-cancel-button" onClick={requestClose}>
                   Cancel
                 </button>
                 <button type="submit" className="primary-button" disabled={indexing || !repoUrl.trim() || !repoConnection?.connected}>
@@ -344,13 +326,9 @@ export function ConnectorSetupModal(props: ConnectorSetupModalProps) {
             emptyAvailableText="No visible Linear teams or projects found."
             workspaceTitle="Workspace Linear sources"
             emptyWorkspaceText="No Linear sources connected to this workspace."
-            error={error}
-            status={status}
             onConnect={onLinearConnect}
-            onDisconnect={() => requestDisconnect(onLinearDisconnect)}
             onQueryChange={onLinearQueryChange}
             onSearch={onLinearSearch}
-            onClose={onClose}
             availableRows={linearSelectableSources.slice(0, 8).map((source) => {
               const alreadyAdded = linearSources.some(
                 (current) =>
@@ -395,13 +373,9 @@ export function ConnectorSetupModal(props: ConnectorSetupModalProps) {
             emptyAvailableText="No visible Confluence spaces found."
             workspaceTitle="Workspace Confluence sources"
             emptyWorkspaceText="No Confluence spaces connected to this workspace."
-            error={error}
-            status={status}
             onConnect={onConfluenceConnect}
-            onDisconnect={() => requestDisconnect(onConfluenceDisconnect)}
             onQueryChange={onConfluenceQueryChange}
             onSearch={onConfluenceSearch}
-            onClose={onClose}
             availableRows={confluenceSpaces.slice(0, 8).map((space) => {
               const alreadyAdded = confluenceSources.some(
                 (source) => source.cloud_id === space.cloud_id && source.space_id === space.space_id,
@@ -444,13 +418,9 @@ export function ConnectorSetupModal(props: ConnectorSetupModalProps) {
             emptyAvailableText="No visible Notion databases found."
             workspaceTitle="Workspace Notion sources"
             emptyWorkspaceText="No Notion databases connected to this workspace."
-            error={error}
-            status={status}
             onConnect={onNotionConnect}
-            onDisconnect={() => requestDisconnect(onNotionDisconnect)}
             onQueryChange={onNotionQueryChange}
             onSearch={onNotionSearch}
-            onClose={onClose}
             availableRows={notionDatabases.slice(0, 8).map((database) => {
               const alreadyAdded = notionSources.some(
                 (source) => source.database_id === database.database_id,
@@ -484,25 +454,12 @@ export function ConnectorSetupModal(props: ConnectorSetupModalProps) {
               {connector.name} setup fields will be added here.
             </div>
             <div className="connector-modal-actions">
-              <button type="button" className="primary-button" onClick={onClose}>
+              <button type="button" className="primary-button" onClick={requestClose}>
                 Done
               </button>
             </div>
           </div>
         )}
-      </div>
-      <ConnectorDisconnectDialog
-        connectorName={connector.name}
-        open={disconnectOpen}
-        loading={disconnecting}
-        onCancel={() => {
-          if (!disconnecting) {
-            setDisconnectOpen(false);
-            pendingDisconnectRef.current = null;
-          }
-        }}
-        onConfirm={() => void confirmDisconnect()}
-      />
-    </div>
+    </>
   );
 }

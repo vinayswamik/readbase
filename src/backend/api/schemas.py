@@ -72,6 +72,10 @@ class CreateWorkspaceRequest(BaseModel):
     name: str
 
 
+class UpdateWorkspaceRequest(BaseModel):
+    name: str
+
+
 class AddWorkspaceMemberRequest(BaseModel):
     email: str
 
@@ -91,6 +95,23 @@ class WorkspaceMembersResponse(BaseModel):
 class WorkspaceInvitesResponse(BaseModel):
     received: list["WorkspaceInviteListItemResponse"]
     sent: list["WorkspaceInviteListItemResponse"]
+
+
+class NotificationResponse(BaseModel):
+    notification_id: str
+    type: str
+    title: str
+    body: str
+    workspace_id: str
+    workspace_name: str
+    actor_user_id: str
+    actor_name: str
+    read: bool
+    created_at: str
+
+
+class NotificationsResponse(BaseModel):
+    notifications: list[NotificationResponse]
 
 
 class WorkspaceInviteListItemResponse(BaseModel):

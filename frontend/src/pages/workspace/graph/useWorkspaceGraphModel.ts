@@ -30,6 +30,45 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+export function computeCenteredViewport(
+  nodes: HierarchyNode[],
+  boardSize: BoardSize,
+  scale = 1,
+): Viewport {
+  if (boardSize.width <= 0 || boardSize.height <= 0) {
+    return { x: 120, y: 80, scale };
+  }
+
+  if (!nodes.length) {
+    return {
+      x: boardSize.width / 2 - (GRAPH_LAYOUT_START_X + NODE_WIDTH / 2) * scale,
+      y: boardSize.height / 2 - (GRAPH_LAYOUT_START_Y + NODE_HEIGHT / 2) * scale,
+      scale,
+    };
+  }
+
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+
+  for (const node of nodes) {
+    minX = Math.min(minX, node.x);
+    minY = Math.min(minY, node.y);
+    maxX = Math.max(maxX, node.x + NODE_WIDTH);
+    maxY = Math.max(maxY, node.y + NODE_HEIGHT);
+  }
+
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+
+  return {
+    x: boardSize.width / 2 - centerX * scale,
+    y: boardSize.height / 2 - centerY * scale,
+    scale,
+  };
+}
+
 export function findParentNodeId(
   nodeId: string | null,
   connections: HierarchyConnection[],
@@ -201,6 +240,8 @@ export function useWorkspaceGraphModel({
   const createNodeInFlightRef = useRef(false);
   const boardRef = useRef<HTMLDivElement | null>(null);
   const queuedGraphRefreshRef = useRef<number | null>(null);
+  const shouldCenterViewportRef = useRef(true);
+  const [graphLoaded, setGraphLoaded] = useState(false);
 
   const selectedNode = useMemo(
     () => nodes.find((node) => node.node_id === selectedNodeId) ?? null,
@@ -298,10 +339,25 @@ export function useWorkspaceGraphModel({
       setAssignableUsers(result.assignable_users || []);
       setGraphStatus("");
       setGraphRevision((revision) => revision + 1);
+      setGraphLoaded(true);
     } catch (error) {
       handleApiError(error, setGraphStatus);
+      setGraphLoaded(true);
     }
   }, [handleApiError, workspace.workspace_id]);
+
+  const centerViewport = useCallback(
+    (scale?: number) => {
+      setViewport((currentViewport) =>
+        computeCenteredViewport(
+          graphNodes,
+          boardSize,
+          scale ?? currentViewport.scale,
+        ),
+      );
+    },
+    [boardSize, graphNodes],
+  );
 
   const queueGraphRefresh = useCallback(() => {
     if (queuedGraphRefreshRef.current !== null) {
@@ -316,6 +372,23 @@ export function useWorkspaceGraphModel({
   useEffect(() => {
     void loadGraph();
   }, [loadGraph]);
+
+  useEffect(() => {
+    shouldCenterViewportRef.current = true;
+    setGraphLoaded(false);
+    setViewport({ x: 120, y: 80, scale: 1 });
+  }, [workspace.workspace_id]);
+
+  useEffect(() => {
+    if (!shouldCenterViewportRef.current || !graphLoaded) {
+      return;
+    }
+    if (boardSize.width <= 0 || boardSize.height <= 0) {
+      return;
+    }
+    shouldCenterViewportRef.current = false;
+    setViewport(computeCenteredViewport(graphNodes, boardSize, 1));
+  }, [boardSize, graphLoaded, graphNodes, workspace.workspace_id]);
 
   useEffect(
     () => () => {
@@ -410,6 +483,7 @@ export function useWorkspaceGraphModel({
     edgeSegments,
     loadGraph,
     queueGraphRefresh,
+    centerViewport,
   };
 }
 

@@ -61,6 +61,41 @@ class WorkspaceServiceTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             workspace_service.create_workspace("admin-1", " demo ", owner_email="admin@example.com")
 
+    def test_owner_can_rename_workspace_without_duplicate(self):
+        first = workspace_service.create_workspace("admin-1", "Demo", owner_email="admin@example.com")
+        second = workspace_service.create_workspace("admin-1", "Beta", owner_email="admin@example.com")
+
+        updated = workspace_service.update_workspace(
+            "admin-1",
+            second["workspace_id"],
+            "Gamma",
+        )
+
+        self.assertEqual(updated["name"], "Gamma")
+        self.assertEqual(updated["workspace_id"], second["workspace_id"])
+        self.assertEqual(first["name"], "Demo")
+
+    def test_rename_rejects_duplicate_name_for_same_owner(self):
+        workspace_service.create_workspace("admin-1", "Demo", owner_email="admin@example.com")
+        second = workspace_service.create_workspace("admin-1", "Beta", owner_email="admin@example.com")
+
+        with self.assertRaises(ValidationError):
+            workspace_service.update_workspace(
+                "admin-1",
+                second["workspace_id"],
+                " demo ",
+            )
+
+    def test_only_owner_can_rename_workspace(self):
+        workspace = workspace_service.create_workspace("admin-1", "Demo", owner_email="admin@example.com")
+
+        with self.assertRaises(PermissionDeniedError):
+            workspace_service.update_workspace(
+                "member-1",
+                workspace["workspace_id"],
+                "Renamed",
+            )
+
     def test_same_name_is_allowed_for_different_owners(self):
         first = workspace_service.create_workspace("admin-1", "Demo", owner_email="admin1@example.com")
         second = workspace_service.create_workspace("admin-2", "demo", owner_email="admin2@example.com")

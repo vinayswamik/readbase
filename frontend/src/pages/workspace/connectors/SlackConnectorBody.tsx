@@ -6,7 +6,7 @@ import {
   buildSlackChannelSearchIndex,
   searchSlackChannelEntries,
 } from "./slackChannelSearch";
-import { SlackUnlinkTeamDialog } from "./SlackUnlinkTeamDialog";
+import { confirmSlackWorkspaceRemove } from "./connectorBrowserConfirm";
 
 function SlackWorkspaceRow({
   team,
@@ -84,7 +84,6 @@ export function SlackConnectorBody({
   onAddSlackChannel,
   onRemoveSlackSource,
 }: ConnectorSetupModalProps) {
-  const [pendingUnlinkTeam, setPendingUnlinkTeam] = useState<WorkspaceSlackTeam | null>(null);
   const [unlinkingTeam, setUnlinkingTeam] = useState(false);
   const slackConfigured = slackConnection?.configured !== false;
   const hasLinkedWorkspace = slackTeams.length > 0;
@@ -105,14 +104,16 @@ export function SlackConnectorBody({
     [addedChannelKeys, deferredChannelQuery, slackChannelSearchIndex],
   );
 
-  async function handleConfirmUnlinkTeam() {
-    if (!pendingUnlinkTeam || unlinkingTeam) {
+  async function handleRequestRemove(team: WorkspaceSlackTeam) {
+    if (unlinkingTeam || slackLoading) {
+      return;
+    }
+    if (!confirmSlackWorkspaceRemove(team.team_name, team.team_domain)) {
       return;
     }
     setUnlinkingTeam(true);
     try {
-      await Promise.resolve(onSlackUnlinkTeam(pendingUnlinkTeam.team_id));
-      setPendingUnlinkTeam(null);
+      await Promise.resolve(onSlackUnlinkTeam(team.team_id));
     } finally {
       setUnlinkingTeam(false);
     }
@@ -177,7 +178,7 @@ export function SlackConnectorBody({
                 key={team.team_id}
                 team={team}
                 loading={slackLoading || unlinkingTeam}
-                onRequestRemove={setPendingUnlinkTeam}
+                onRequestRemove={(team) => void handleRequestRemove(team)}
               />
             ))
           )}
@@ -245,19 +246,6 @@ export function SlackConnectorBody({
           </div>
         </section>
       ) : null}
-
-      <SlackUnlinkTeamDialog
-        teamName={pendingUnlinkTeam?.team_name ?? ""}
-        teamDomain={pendingUnlinkTeam?.team_domain}
-        open={pendingUnlinkTeam !== null}
-        loading={unlinkingTeam}
-        onCancel={() => {
-          if (!unlinkingTeam) {
-            setPendingUnlinkTeam(null);
-          }
-        }}
-        onConfirm={() => void handleConfirmUnlinkTeam()}
-      />
     </div>
   );
 }

@@ -27,12 +27,14 @@ export function createMockStore() {
     user: clone(seed.user),
     authenticated: seed.authenticated,
     workspaces: clone(seed.workspaces),
+    notifications: clone(seed.notifications ?? []),
     invites: clone(seed.invites),
     linkInvites: clone(seed.linkInvites),
     graphs: clone(seed.graphs),
     repos: clone(seed.repos),
     connectors: clone(seed.connectors),
     workspaceSources: clone(seed.workspaceSources),
+    additionalDocuments: clone(seed.additionalDocuments ?? {}),
     emptyLists: clone(seed.emptyLists),
   };
 
@@ -88,10 +90,20 @@ export function createMockStore() {
       return { workspaces: state.workspaces };
     },
     createWorkspace(name) {
+      const normalizedName = String(name ?? "").trim().replace(/\s+/g, " ");
+      const nameKey = normalizedName.toLocaleLowerCase();
+      const duplicate = state.workspaces.some(
+        (workspace) =>
+          workspace.owner_user_id === state.user.id &&
+          String(workspace.name ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase() === nameKey,
+      );
+      if (duplicate) {
+        throw new Error("Workspace name already exists.");
+      }
       const workspace = {
         workspace_id: createId("ws"),
         owner_user_id: state.user.id,
-        name,
+        name: normalizedName,
         created_at: nowIso(),
         can_manage: true,
       };
@@ -106,8 +118,75 @@ export function createMockStore() {
       const [removed] = state.workspaces.splice(index, 1);
       return removed;
     },
+    updateWorkspace(workspaceId, name) {
+      const workspace = findWorkspace(workspaceId);
+      if (!workspace) {
+        return null;
+      }
+      if (!workspace.can_manage) {
+        throw new Error("Workspace owner access required.");
+      }
+      const normalizedName = String(name ?? "").trim().replace(/\s+/g, " ");
+      if (!normalizedName) {
+        throw new Error("Workspace name is required.");
+      }
+      if (normalizedName.length > 80) {
+        throw new Error("Workspace name must be 80 characters or fewer.");
+      }
+      const nameKey = normalizedName.toLocaleLowerCase();
+      const duplicate = state.workspaces.some(
+        (entry) =>
+          entry.workspace_id !== workspaceId &&
+          entry.owner_user_id === state.user.id &&
+          String(entry.name ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase() === nameKey,
+      );
+      if (duplicate) {
+        throw new Error("Workspace name already exists.");
+      }
+      workspace.name = normalizedName;
+      return workspace;
+    },
     leaveWorkspace(workspaceId) {
-      return this.deleteWorkspace(workspaceId);
+      const index = state.workspaces.findIndex(
+        (workspace) => workspace.workspace_id === workspaceId,
+      );
+      if (index === -1) {
+        return null;
+      }
+      const [removed] = state.workspaces.splice(index, 1);
+      this.recordWorkspaceMemberLeft(removed);
+      return removed;
+    },
+    listNotifications() {
+      return {
+        notifications: state.notifications
+          .filter((notification) => notification.recipient_user_id === state.user.id)
+          .sort((left, right) => right.created_at.localeCompare(left.created_at)),
+      };
+    },
+    recordWorkspaceMemberLeft(workspace) {
+      if (!workspace || !state.user?.id) {
+        return;
+      }
+      const actorUserId = state.user.id;
+      const actorName = state.user.name || "A teammate";
+      const recipientId = workspace.owner_user_id;
+      if (!recipientId || recipientId === actorUserId) {
+        return;
+      }
+      state.notifications.unshift({
+        notification_id: createId("notif"),
+        recipient_user_id: recipientId,
+        type: "workspace_member_left",
+        title: "Member left workspace",
+        body: `${actorName} stepped off the workspace. Review shared access if anything still routes through them.`,
+        workspace_id: workspace.workspace_id,
+        workspace_name: workspace.name,
+        actor_user_id: actorUserId,
+        actor_name: actorName,
+        read: false,
+        created_at: nowIso(),
+      });
     },
     listInvites() {
       return {
@@ -343,6 +422,67 @@ export function createMockStore() {
     },
     postOk(body = {}) {
       return body;
+    },
+    listAdditionalDocuments(workspaceId) {
+      const documents = (state.additionalDocuments[workspaceId] ?? []).map((document) => ({
+        ...document,
+        assigned_user_ids: Array.isArray(document.assigned_user_ids) ? document.assigned_user_ids : [],
+      }));
+      return { documents };
+    },
+    addAdditionalDocument(workspaceId, name) {
+      const trimmedName = String(name ?? "").trim();
+      if (!trimmedName) {
+        throw new Error("Document name is required.");
+      }
+      if (!state.additionalDocuments[workspaceId]) {
+        state.additionalDocuments[workspaceId] = [];
+      }
+      const duplicate = state.additionalDocuments[workspaceId].some(
+        (document) => document.name.toLocaleLowerCase() === trimmedName.toLocaleLowerCase(),
+      );
+      if (duplicate) {
+        throw new Error("A document with this name already exists in the workspace.");
+      }
+      const document = {
+        document_id: createId("doc"),
+        name: trimmedName,
+        created_at: nowIso(),
+        uploaded_by_user_id: state.user?.id ?? null,
+        assigned_user_ids: [],
+      };
+      state.additionalDocuments[workspaceId].push(document);
+      return { document };
+    },
+    updateAdditionalDocument(workspaceId, documentId, payload) {
+      const documents = state.additionalDocuments[workspaceId] ?? [];
+      const document = documents.find((entry) => entry.document_id === documentId);
+      if (!document) {
+        return null;
+      }
+
+      const graph = getGraph(workspaceId);
+      const validUserIds = new Set(
+        (graph.assignable_users ?? []).map((user) => user.user_id).filter(Boolean),
+      );
+      const requestedIds = Array.isArray(payload?.assigned_user_ids) ? payload.assigned_user_ids : [];
+      const normalizedIds = [...new Set(requestedIds.map((userId) => String(userId).trim()).filter(Boolean))];
+      const invalidIds = normalizedIds.filter((userId) => !validUserIds.has(userId));
+      if (invalidIds.length) {
+        throw new Error("One or more selected users cannot access this document.");
+      }
+
+      document.assigned_user_ids = normalizedIds;
+      return { document: { ...document, assigned_user_ids: [...normalizedIds] } };
+    },
+    deleteAdditionalDocument(workspaceId, documentId) {
+      const documents = state.additionalDocuments[workspaceId] ?? [];
+      const index = documents.findIndex((document) => document.document_id === documentId);
+      if (index < 0) {
+        return null;
+      }
+      documents.splice(index, 1);
+      return { document_id: documentId };
     },
   };
 }

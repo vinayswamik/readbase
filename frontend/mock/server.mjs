@@ -83,10 +83,27 @@ async function handleRequest(req, res) {
       if (!name) {
         return sendJson(res, 400, { error: "Workspace name is required." });
       }
-      return sendJson(res, 200, store.createWorkspace(name));
+      try {
+        return sendJson(res, 200, store.createWorkspace(name));
+      } catch (error) {
+        return sendJson(res, 400, { error: error instanceof Error ? error.message : "Invalid workspace name." });
+      }
     }
 
     let params = matchPath("/api/workspaces/:workspaceId", pathname);
+    if (method === "PATCH" && params) {
+      try {
+        const body = await readJsonBody(req);
+        const workspace = store.updateWorkspace(params.workspaceId, body?.name);
+        if (!workspace) {
+          return sendJson(res, 404, { error: "Workspace not found." });
+        }
+        return sendJson(res, 200, workspace);
+      } catch (error) {
+        return sendJson(res, 400, { error: error instanceof Error ? error.message : "Invalid workspace name." });
+      }
+    }
+
     if (method === "DELETE" && params) {
       const workspace = store.deleteWorkspace(params.workspaceId);
       if (!workspace) {
@@ -106,6 +123,10 @@ async function handleRequest(req, res) {
 
     if (method === "GET" && pathname === "/api/invites") {
       return sendJson(res, 200, store.listInvites());
+    }
+
+    if (method === "GET" && pathname === "/api/notifications") {
+      return sendJson(res, 200, store.listNotifications());
     }
 
     params = matchPath("/api/invites/join/:joinToken", pathname);
@@ -302,6 +323,48 @@ async function handleRequest(req, res) {
     }
     if (method === "DELETE" && params) {
       return sendJson(res, 200, { configured: false, cloud_id: null, site_name: null, site_url: null });
+    }
+
+    params = matchPath("/api/workspaces/:workspaceId/documents/:documentId", pathname);
+    if (method === "PATCH" && params) {
+      try {
+        const body = await readJsonBody(req);
+        const result = store.updateAdditionalDocument(
+          params.workspaceId,
+          params.documentId,
+          body,
+        );
+        if (!result) {
+          return sendJson(res, 404, { error: "Document not found." });
+        }
+        return sendJson(res, 200, result);
+      } catch (error) {
+        return sendJson(res, 400, {
+          error: error instanceof Error ? error.message : "Invalid document update.",
+        });
+      }
+    }
+    if (method === "DELETE" && params) {
+      const result = store.deleteAdditionalDocument(params.workspaceId, params.documentId);
+      if (!result) {
+        return sendJson(res, 404, { error: "Document not found." });
+      }
+      return sendJson(res, 200, result);
+    }
+
+    params = matchPath("/api/workspaces/:workspaceId/documents", pathname);
+    if (method === "GET" && params) {
+      return sendJson(res, 200, store.listAdditionalDocuments(params.workspaceId));
+    }
+    if (method === "POST" && params) {
+      try {
+        const body = await readJsonBody(req);
+        return sendJson(res, 200, store.addAdditionalDocument(params.workspaceId, body.name));
+      } catch (error) {
+        return sendJson(res, 400, {
+          error: error instanceof Error ? error.message : "Invalid document upload.",
+        });
+      }
     }
 
     params = matchPath("/api/workspaces/:workspaceId/index", pathname);

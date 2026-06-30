@@ -16,7 +16,7 @@ type GraphModalShellProps = {
   children: ReactNode;
 };
 
-function GraphModalShell({ open, title, description, onClose, children }: GraphModalShellProps) {
+export function GraphModalShell({ open, title, description, onClose, children }: GraphModalShellProps) {
   if (!open) {
     return null;
   }
@@ -82,7 +82,7 @@ export function GraphAddNodeModal({
   return (
     <GraphModalShell
       open={open}
-      title="Add node"
+      title="Add User"
       description="Invite someone and add them to the hierarchy graph."
       onClose={onClose}
     >

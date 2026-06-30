@@ -49,6 +49,65 @@ class WorkspaceApiTests(unittest.TestCase):
         self.assertEqual(body["owner_user_id"], "member-1")
         self.assertTrue(body["can_manage"])
 
+    def test_owner_can_rename_workspace(self):
+        self._login_as(AuthUser("owner-1", "owner@example.com", "Owner"))
+        workspace = self.client.post("/api/workspaces", json={"name": "Demo"}).json()
+
+        response = self.client.patch(
+            f"/api/workspaces/{workspace['workspace_id']}",
+            json={"name": "Renamed Demo"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["name"], "Renamed Demo")
+        self.assertEqual(body["workspace_id"], workspace["workspace_id"])
+
+    def test_rename_rejects_duplicate_owned_workspace_name(self):
+        self._login_as(AuthUser("owner-1", "owner@example.com", "Owner"))
+        first = self.client.post("/api/workspaces", json={"name": "Alpha"}).json()
+        second = self.client.post("/api/workspaces", json={"name": "Beta"}).json()
+
+        response = self.client.patch(
+            f"/api/workspaces/{second['workspace_id']}",
+            json={"name": " alpha "},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        payload = response.json()
+        message = str(payload.get("error") or payload.get("detail") or "").lower()
+        self.assertIn("already exists", message)
+        unchanged = self.client.get("/api/workspaces").json()["workspaces"]
+        self.assertEqual(
+            next(item for item in unchanged if item["workspace_id"] == first["workspace_id"])["name"],
+            "Alpha",
+        )
+
+    def test_member_cannot_rename_workspace(self):
+        self._login_as(AuthUser("owner-1", "owner@example.com", "Owner"))
+        workspace = self.client.post("/api/workspaces", json={"name": "Demo"}).json()
+        graph_url = f"/api/workspaces/{workspace['workspace_id']}/graph"
+        self.client.post(
+            f"{graph_url}/nodes",
+            json={
+                "display_name": "Member",
+                "invitee_email": "member@example.com",
+                "relation": "Peer",
+                "reason": "Needs access",
+            },
+        )
+
+        upsert_authenticated_user(
+            GoogleIdentity("member-1", "member@example.com", "Member")
+        )
+        self._login_as(AuthUser("member-1", "member@example.com", "Member"))
+        response = self.client.patch(
+            f"/api/workspaces/{workspace['workspace_id']}",
+            json={"name": "Hijacked"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+
     def test_join_code_endpoints_are_removed(self):
         self._login_as(AuthUser("owner-1", "owner@example.com", "Owner"))
         workspace = self.client.post("/api/workspaces", json={"name": "Demo"}).json()

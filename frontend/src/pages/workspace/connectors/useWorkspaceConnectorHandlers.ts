@@ -106,9 +106,11 @@ export function useWorkspaceConnectorHandlers({
   }
 
   function openConnectorModal(connectorId: ConnectorId) {
+    if (activeConnector?.id !== connectorId) {
+      setConnectorStatus("");
+      setConnectorError(null);
+    }
     setActiveConnectorId(connectorId);
-    setConnectorStatus("");
-    setConnectorError(null);
     if (connectorId === "github" && !connectorRepoUrl) {
       setConnectorRepoUrl(selectedRepoUrl || "");
     }
@@ -116,8 +118,6 @@ export function useWorkspaceConnectorHandlers({
 
   function closeConnectorModal() {
     setActiveConnectorId(null);
-    setConnectorStatus("");
-    setConnectorError(null);
   }
 
   async function handleGithubConnectorSubmit(
@@ -156,11 +156,23 @@ export function useWorkspaceConnectorHandlers({
   }
 
   function handleGithubConnect() {
-    void startOAuthFlow("/api/me/integrations/github/start");
+    void startOAuthFlow("/api/me/integrations/github/start", {
+      connectorId: "github",
+      onMockConnected: () => {
+        notifyWorkspaceSourcesChanged();
+        void loads.loadGithubConnection();
+      },
+    });
   }
 
   function handleBitbucketConnect() {
-    void startOAuthFlow("/api/me/integrations/bitbucket/start");
+    void startOAuthFlow("/api/me/integrations/bitbucket/start", {
+      connectorId: "bitbucket",
+      onMockConnected: () => {
+        notifyWorkspaceSourcesChanged();
+        void loads.loadBitbucketConnection();
+      },
+    });
   }
 
   async function handleBitbucketDisconnect() {
@@ -182,7 +194,13 @@ export function useWorkspaceConnectorHandlers({
   }
 
   function handleGitlabConnect() {
-    void startOAuthFlow("/api/me/integrations/gitlab/start");
+    void startOAuthFlow("/api/me/integrations/gitlab/start", {
+      connectorId: "gitlab",
+      onMockConnected: () => {
+        notifyWorkspaceSourcesChanged();
+        void loads.loadGitlabConnection();
+      },
+    });
   }
 
   async function handleGitlabDisconnect() {

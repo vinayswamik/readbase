@@ -1,59 +1,55 @@
-import { ReadbaseLogoIcon } from "../components/ReadbaseLogoIcon";
+import { AppTopbar } from "../components/AppTopbar";
+import type { AuthProvider } from "../config/auth";
 
-export function LoginPage({
-  loading,
-  error,
-  onLogin,
-}: {
+type LoginPageProps = {
+  provider: AuthProvider | null;
+  configError?: string | null;
   loading: boolean;
   error: string | null;
   onLogin: () => void;
-}) {
+};
+
+export function LoginPage({
+  provider,
+  configError,
+  loading,
+  error,
+  onLogin,
+}: LoginPageProps) {
   return (
     <main className="login-page">
-      <header className="login-topbar">
-        <span className="login-logo" aria-label="Readbase">
-          <span className="login-logo-icon-wrap">
-            <ReadbaseLogoIcon className="login-logo-icon" />
-          </span>
-          <span className="login-logo-text">readbase</span>
-        </span>
-        <button
-          className="login-topbar-button"
-          type="button"
-          onClick={onLogin}
-          disabled={loading}
-        >
-          {loading ? "Signing in..." : "Login"}
-        </button>
-      </header>
+      <AppTopbar />
 
-      <div className="login-page-body">
+      <div className="page-body-surface">
         <section className="login-panel" aria-labelledby="login-title">
-          <header className="login-header">
-            <h1 id="login-title">Sign in to readbase</h1>
-          </header>
+          <h1 id="login-title" className="login-title">
+            Sign in to readbase
+          </h1>
 
-          <div className="provider-grid">
+          {configError ? (
+            <p className="login-message login-message--error" role="alert">
+              {configError}
+            </p>
+          ) : (
             <button
-              className="login-topbar-button"
+              className="login-button"
               type="button"
               onClick={onLogin}
               disabled={loading}
             >
-              {loading ? "Signing in..." : "Sign in with your organization"}
+              {loading ? "Signing in..." : provider?.label}
             </button>
-          </div>
+          )}
 
           {error ? (
-            <p className="error-note" role="status" aria-live="polite">
+            <p className="login-message login-message--error" role="status" aria-live="polite">
               {error}
             </p>
           ) : null}
 
-          <p className="footer-note">
-            Your organization&apos;s identity provider keeps your account secure.
-          </p>
+          {!configError && provider ? (
+            <p className="login-footer">{provider.footerNote}</p>
+          ) : null}
         </section>
       </div>
     </main>

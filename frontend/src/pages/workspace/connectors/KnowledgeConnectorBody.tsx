@@ -14,15 +14,11 @@ export function KnowledgeConnectorBody({
   emptyAvailableText,
   workspaceTitle,
   emptyWorkspaceText,
-  error,
-  status,
   availableRows,
   workspaceRows,
   onConnect,
-  onDisconnect,
   onQueryChange,
   onSearch,
-  onClose,
 }: {
   connectorName: string;
   connected: boolean;
@@ -37,15 +33,11 @@ export function KnowledgeConnectorBody({
   emptyAvailableText: string;
   workspaceTitle: string;
   emptyWorkspaceText: string;
-  error: string | null;
-  status: string;
   availableRows: ReactNode[];
   workspaceRows: ReactNode[];
   onConnect: () => void;
-  onDisconnect: () => void;
   onQueryChange: (query: string) => void;
   onSearch: () => void;
-  onClose: () => void;
 }) {
   return (
     <div className="connector-modal-body">

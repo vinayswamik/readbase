@@ -379,7 +379,8 @@ export interface paths {
         delete: operations["delete_workspace_endpoint_api_workspaces__workspace_id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** Update Workspace Endpoint */
+        patch: operations["update_workspace_endpoint_api_workspaces__workspace_id__patch"];
         trace?: never;
     };
     "/api/workspaces/{workspace_id}/leave": {
@@ -500,6 +501,23 @@ export interface paths {
         head?: never;
         /** Update Member Connector Manager Endpoint */
         patch: operations["update_member_connector_manager_endpoint_api_workspaces__workspace_id__members__email__connector_manager_patch"];
+        trace?: never;
+    };
+    "/api/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Notifications Endpoint */
+        get: operations["list_notifications_endpoint_api_notifications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/invites": {
@@ -959,6 +977,58 @@ export interface paths {
         };
         /** Slack Channels */
         get: operations["slack_channels_api_me_integrations_slack_channels_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/slack/teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Workspace Slack Teams */
+        get: operations["workspace_slack_teams_api_workspaces__workspace_id__slack_teams_get"];
+        put?: never;
+        /** Link Slack Team */
+        post: operations["link_slack_team_api_workspaces__workspace_id__slack_teams_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/slack/teams/{team_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Unlink Slack Team */
+        delete: operations["unlink_slack_team_api_workspaces__workspace_id__slack_teams__team_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/slack/channels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Workspace Slack Channels */
+        get: operations["workspace_slack_channels_api_workspaces__workspace_id__slack_channels_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2077,6 +2147,39 @@ export interface components {
             /** Sources */
             sources: components["schemas"]["LinearSelectableSourceResponse"][];
         };
+        /** LinkWorkspaceSlackTeamRequest */
+        LinkWorkspaceSlackTeamRequest: {
+            /** Team Id */
+            team_id: string;
+        };
+        /** NotificationResponse */
+        NotificationResponse: {
+            /** Notification Id */
+            notification_id: string;
+            /** Type */
+            type: string;
+            /** Title */
+            title: string;
+            /** Body */
+            body: string;
+            /** Workspace Id */
+            workspace_id: string;
+            /** Workspace Name */
+            workspace_name: string;
+            /** Actor User Id */
+            actor_user_id: string;
+            /** Actor Name */
+            actor_name: string;
+            /** Read */
+            read: boolean;
+            /** Created At */
+            created_at: string;
+        };
+        /** NotificationsResponse */
+        NotificationsResponse: {
+            /** Notifications */
+            notifications: components["schemas"]["NotificationResponse"][];
+        };
         /** NotionConnectionResponse */
         NotionConnectionResponse: {
             /** Connected */
@@ -2304,6 +2407,11 @@ export interface components {
         UpdateWorkspaceMemberConnectorManagerRequest: {
             /** Connector Manager */
             connector_manager: boolean;
+        };
+        /** UpdateWorkspaceRequest */
+        UpdateWorkspaceRequest: {
+            /** Name */
+            name: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -2716,6 +2824,31 @@ export interface components {
         WorkspaceSlackSourcesResponse: {
             /** Sources */
             sources: components["schemas"]["WorkspaceSlackSourceResponse"][];
+        };
+        /** WorkspaceSlackTeamResponse */
+        WorkspaceSlackTeamResponse: {
+            /** Team Id */
+            team_id: string;
+            /** Team Name */
+            team_name: string;
+            /** Team Domain */
+            team_domain?: string | null;
+            /** Linked By User Id */
+            linked_by_user_id: string;
+            /** Linked At */
+            linked_at: string;
+            /** Updated At */
+            updated_at: string;
+            /**
+             * User Oauth Connected
+             * @default false
+             */
+            user_oauth_connected: boolean;
+        };
+        /** WorkspaceSlackTeamsResponse */
+        WorkspaceSlackTeamsResponse: {
+            /** Teams */
+            teams: components["schemas"]["WorkspaceSlackTeamResponse"][];
         };
         /** WorkspacesResponse */
         WorkspacesResponse: {
@@ -3557,6 +3690,43 @@ export interface operations {
             };
         };
     };
+    update_workspace_endpoint_api_workspaces__workspace_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: {
+                readbase_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateWorkspaceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     leave_workspace_endpoint_api_workspaces__workspace_id__leave_post: {
         parameters: {
             query?: never;
@@ -3826,6 +3996,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkspaceMemberResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_notifications_endpoint_api_notifications_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                readbase_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -4828,6 +5029,7 @@ export interface operations {
             path?: never;
             cookie?: {
                 readbase_slack_oauth_state?: string | null;
+                readbase_slack_pkce?: string | null;
                 readbase_slack_return_workspace?: string | null;
                 readbase_session?: string | null;
             };
@@ -4927,6 +5129,145 @@ export interface operations {
             };
             header?: never;
             path?: never;
+            cookie?: {
+                readbase_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SlackChannelsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_slack_teams_api_workspaces__workspace_id__slack_teams_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: {
+                readbase_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceSlackTeamsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    link_slack_team_api_workspaces__workspace_id__slack_teams_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: {
+                readbase_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkWorkspaceSlackTeamRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceSlackTeamResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unlink_slack_team_api_workspaces__workspace_id__slack_teams__team_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                team_id: string;
+            };
+            cookie?: {
+                readbase_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceSlackTeamResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_slack_channels_api_workspaces__workspace_id__slack_channels_get: {
+        parameters: {
+            query?: {
+                query?: string;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
             cookie?: {
                 readbase_session?: string | null;
             };
@@ -6129,9 +6470,7 @@ export interface operations {
             query?: never;
             header?: never;
             path?: never;
-            cookie?: {
-                readbase_session?: string | null;
-            };
+            cookie?: never;
         };
         requestBody?: never;
         responses: {
@@ -6141,16 +6480,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ReposResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": unknown;
                 };
             };
         };
@@ -6160,15 +6490,9 @@ export interface operations {
             query?: never;
             header?: never;
             path?: never;
-            cookie?: {
-                readbase_session?: string | null;
-            };
+            cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["IndexRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -6176,16 +6500,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IndexedRepoResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": unknown;
                 };
             };
         };
@@ -6195,15 +6510,9 @@ export interface operations {
             query?: never;
             header?: never;
             path?: never;
-            cookie?: {
-                readbase_session?: string | null;
-            };
+            cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AskRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -6211,16 +6520,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AskResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": unknown;
                 };
             };
         };

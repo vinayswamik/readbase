@@ -11,7 +11,7 @@ URLs sync with the screen so **Back/Forward** work:
 | `/login` | Sign-in |
 | `/workspaces` | Workspace list |
 | `/workspaces/ws-alpha` | Workspace view |
-| `/workspaces/ws-alpha?panel=invites` | Workspace + invites modal |
+| `/workspaces/ws-alpha` | Workspace graph |
 | `/workspaces/ws-alpha?panel=sources` | Workspace + sources modal |
 
 ## Start

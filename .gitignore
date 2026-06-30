@@ -12,3 +12,10 @@ __pycache__/
 /frontend/dist/
 *.egg-info/
 /certs/*.pem
+.cursor/
+docs/
+
+# Personal local dev tooling (banner, deploy-mode sync checks) — not shared
+.local-dev/
+frontend/.env.development.local
+frontend/.local-vite.config.mjs

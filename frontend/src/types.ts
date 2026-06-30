@@ -54,6 +54,8 @@ export type {
   WorkspaceConfluenceSourcesResponse,
   WorkspaceInviteItem,
   WorkspaceInvitesResponse,
+  NotificationItem,
+  NotificationsResponse,
   WorkspaceJiraSite,
   WorkspaceJiraSiteStatus,
   WorkspaceJiraSource,

@@ -1,5 +1,7 @@
 import type { MouseEvent, ReactNode, RefObject } from "react";
 
+import userPlusIconMarkup from "../assets/icons/user-plus.svg?raw";
+
 import type { HierarchyNode } from "../types";
 
 export type Viewport = {
@@ -28,7 +30,6 @@ export type NodeEditAnchor = {
 };
 
 export function WorkspaceGraphCanvas({
-  workspaceName,
   graphRevision,
   boardRef,
   nodes,
@@ -40,7 +41,6 @@ export function WorkspaceGraphCanvas({
   chatOpen,
   messageCount,
   children,
-  onBack,
   onAddNode,
   onZoom,
   onViewportReset,
@@ -51,7 +51,6 @@ export function WorkspaceGraphCanvas({
   onEditNode,
   onOpenChat,
 }: {
-  workspaceName: string;
   graphRevision: number;
   boardRef: RefObject<HTMLDivElement | null>;
   nodes: HierarchyNode[];
@@ -63,7 +62,6 @@ export function WorkspaceGraphCanvas({
   chatOpen: boolean;
   messageCount: number;
   children: ReactNode;
-  onBack: () => void;
   onAddNode: () => void;
   onZoom: (delta: number) => void;
   onViewportReset: () => void;
@@ -76,30 +74,6 @@ export function WorkspaceGraphCanvas({
 }) {
   return (
     <section className="graph-stage" aria-label="Hierarchy graph board">
-      <div className="graph-stage-topbar">
-        <button type="button" className="graph-back-button" onClick={onBack}>
-          Back
-        </button>
-        <div className="graph-stage-title">
-          <strong>{workspaceName}</strong>
-          <span>Hierarchy graph</span>
-        </div>
-      </div>
-      <div className="graph-toolbar" aria-label="Board controls">
-        <button type="button" className="graph-toolbar-add-node" onClick={onAddNode}>
-          Add node
-        </button>
-        <span className="graph-toolbar-divider" aria-hidden="true" />
-        <button type="button" onClick={() => onZoom(0.1)} aria-label="Zoom in">
-          +
-        </button>
-        <button type="button" onClick={() => onZoom(-0.1)} aria-label="Zoom out">
-          -
-        </button>
-        <button type="button" onClick={onViewportReset}>
-          Reset
-        </button>
-      </div>
       <div
         ref={boardRef}
         key={graphRevision}
@@ -114,9 +88,55 @@ export function WorkspaceGraphCanvas({
         }}
         onContextMenu={(event) => event.preventDefault()}
       >
+        <div
+          className="graph-toolbar-cluster"
+          aria-label="Board controls"
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <div className="graph-toolbar graph-toolbar-circle">
+            <button
+              type="button"
+              className="graph-toolbar-add-node"
+              onClick={onAddNode}
+              aria-label="Add User"
+              data-tooltip="Add User"
+            >
+              <AddNodeIcon />
+            </button>
+          </div>
+          <div className="graph-toolbar">
+            <div className="graph-toolbar-view" role="group" aria-label="View controls">
+              <button
+                type="button"
+                onClick={() => onZoom(-0.1)}
+                aria-label="Zoom out"
+                data-tooltip="Zoom out"
+              >
+                −
+              </button>
+              <button
+                type="button"
+                onClick={() => onZoom(0.1)}
+                aria-label="Zoom in"
+                data-tooltip="Zoom in"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                className="graph-toolbar-reset"
+                aria-label="Reset view"
+                data-tooltip="Reset view"
+                onClick={onViewportReset}
+              >
+                <ResetViewportIcon />
+              </button>
+            </div>
+          </div>
+        </div>
         {!nodes.length ? (
           <div className="graph-empty">
-            Use Add node in the toolbar to start the hierarchy.
+            Use Add User in the toolbar to start the hierarchy.
           </div>
         ) : null}
         <div
@@ -166,9 +186,14 @@ export function WorkspaceGraphCanvas({
       </div>
       {children}
       {!chatOpen ? (
-        <button type="button" className="floating-ask-button" onClick={onOpenChat}>
-          Ask
-          {messageCount ? <span>{messageCount}</span> : null}
+        <button
+          type="button"
+          className="floating-ask-button"
+          onClick={onOpenChat}
+          aria-label="Ask"
+        >
+          <ChatIcon />
+          {messageCount ? <span className="floating-ask-button-badge">{messageCount}</span> : null}
         </button>
       ) : null}
     </section>
@@ -186,5 +211,45 @@ function GraphEdge({ edge }: { edge: EdgeSegment }) {
         transform: `rotate(${edge.angle}rad)`,
       }}
     />
+  );
+}
+
+function ChatIcon() {
+  return (
+    <svg className="floating-ask-button-icon" viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+      <path
+        d="M7.5 6.75h9a2.25 2.25 0 0 1 2.25 2.25v6.5a2.25 2.25 0 0 1-2.25 2.25h-5.1l-3.18 2.6a.75.75 0 0 1-1.22-.6v-2H7.5a2.25 2.25 0 0 1-2.25-2.25v-6.5A2.25 2.25 0 0 1 7.5 6.75z"
+        fill="none"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.75"
+      />
+    </svg>
+  );
+}
+
+function AddNodeIcon() {
+  return (
+    <span
+      className="graph-toolbar-add-node-icon"
+      aria-hidden="true"
+      dangerouslySetInnerHTML={{ __html: userPlusIconMarkup }}
+    />
+  );
+}
+
+function ResetViewportIcon() {
+  return (
+    <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+      <circle cx="12" cy="12" r="7.25" fill="none" stroke="currentColor" strokeWidth="1.75" />
+      <path
+        d="M12 5.5v2.75M12 15.75V18.5M5.5 12h2.75M15.75 12H18.5"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.75"
+      />
+      <circle cx="12" cy="12" r="1.75" fill="currentColor" />
+    </svg>
   );
 }

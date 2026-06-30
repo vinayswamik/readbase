@@ -18,6 +18,7 @@ from src.backend.api.schemas import (
     IndexedRepoResponse,
     IndexRequest,
     AddWorkspaceMemberRequest,
+    UpdateWorkspaceRequest,
     WorkspaceMemberResponse,
     WorkspaceMembersResponse,
     UpdateWorkspaceMemberConnectorManagerRequest,
@@ -36,6 +37,7 @@ from src.backend.application.services.workspace_service import (
     list_workspace_members,
     list_workspaces,
     remove_workspace_member,
+    update_workspace,
     update_workspace_member_connector_manager,
 )
 
@@ -79,6 +81,19 @@ def delete_workspace_endpoint(
 ) -> dict:
     try:
         return delete_workspace(user.user_id, workspace_id)
+    except ServiceError as exc:
+        raise service_error_to_http(exc) from exc
+
+
+@router.patch("/{workspace_id}", response_model=WorkspaceResponse)
+def update_workspace_endpoint(
+    workspace_id: str,
+    payload: UpdateWorkspaceRequest,
+    user=Depends(require_authenticated_user),
+    _workspace=Depends(require_workspace_owner),
+) -> dict:
+    try:
+        return update_workspace(user.user_id, workspace_id, payload.name)
     except ServiceError as exc:
         raise service_error_to_http(exc) from exc
 

@@ -6,15 +6,11 @@ export function WorkspaceChatPage({
   workspace,
   onBack,
   onSessionExpired,
-  sourcesOpen,
-  onSourcesOpenChange,
 }: {
   user: AuthUser;
   workspace: Workspace;
   onBack: () => void;
   onSessionExpired: () => void;
-  sourcesOpen: boolean;
-  onSourcesOpenChange: (open: boolean) => void;
 }) {
   return (
     <WorkspaceChatPageImpl
@@ -22,8 +18,6 @@ export function WorkspaceChatPage({
       workspace={workspace}
       onBack={onBack}
       onSessionExpired={onSessionExpired}
-      sourcesOpen={sourcesOpen}
-      onSourcesOpenChange={onSourcesOpenChange}
     />
   );
 }

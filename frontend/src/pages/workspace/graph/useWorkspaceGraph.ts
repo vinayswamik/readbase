@@ -340,5 +340,6 @@ export function useWorkspaceGraph(args: UseWorkspaceGraphArgs) {
     handleOpenEditNode,
     handleZoom,
     setViewport,
+    centerViewport: model.centerViewport,
   };
 }

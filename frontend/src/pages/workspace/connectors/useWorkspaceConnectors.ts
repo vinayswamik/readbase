@@ -1,5 +1,5 @@
 import { deleteJson, postJson } from "../../../api";
-import { startOAuthFlow } from "../../../mock/dev";
+import { isMockApi, mockConnectConnector, startOAuthFlow, type StartOAuthFlowOptions } from "../../../mock/dev";
 import type {
   ConfluenceConnection,
   ConfluenceSpace,
@@ -24,6 +24,52 @@ import { buildConnectorStartUrl, type ConnectorId } from "./connectors";
 import type { ConnectorLoads } from "./useWorkspaceConnectorData";
 import { useWorkspaceConnectorHandlers } from "./useWorkspaceConnectorHandlers";
 import { useWorkspaceConnectorRuntime } from "./useWorkspaceConnectorRuntime";
+
+async function reloadConnectorConnection(connectorId: ConnectorId, loads: ConnectorLoads) {
+  switch (connectorId) {
+    case "github":
+      await loads.loadGithubConnection();
+      break;
+    case "bitbucket":
+      await loads.loadBitbucketConnection();
+      break;
+    case "gitlab":
+      await loads.loadGitlabConnection();
+      break;
+    case "jira":
+      await loads.loadJiraConnection();
+      break;
+    case "slack":
+      await loads.loadSlackConnection();
+      await loads.loadSlackTeams();
+      break;
+    case "linear":
+      await loads.loadLinearConnection();
+      break;
+    case "confluence":
+      await loads.loadConfluenceConnection();
+      break;
+    case "notion":
+      await loads.loadNotionConnection();
+      break;
+    case "teams":
+      break;
+  }
+}
+
+function buildMockOAuthOptions(
+  connectorId: ConnectorId,
+  loads: ConnectorLoads,
+  onWorkspaceSourcesChanged?: () => void,
+): StartOAuthFlowOptions {
+  return {
+    connectorId,
+    onMockConnected: () => {
+      onWorkspaceSourcesChanged?.();
+      void reloadConnectorConnection(connectorId, loads);
+    },
+  };
+}
 
 type UseWorkspaceConnectorsArgs = {
   workspace: Workspace;
@@ -54,7 +100,17 @@ export function useWorkspaceConnectors({
     onWorkspaceSourcesChanged,
   });
 
-  function handleConnectConnector(connectorId: ConnectorId) {
+  async function handleConnectConnector(connectorId: ConnectorId) {
+    if (isMockApi()) {
+      try {
+        await mockConnectConnector(connectorId);
+        onWorkspaceSourcesChanged?.();
+        await reloadConnectorConnection(connectorId, loads);
+      } catch (error) {
+        handleApiError(error);
+      }
+      return;
+    }
     void startOAuthFlow(buildConnectorStartUrl(connectorId, workspace.workspace_id));
   }
 
@@ -108,7 +164,10 @@ export function useWorkspaceConnectorHandlersIntegrations({
   } = loads;
 
   function handleJiraConnect() {
-    void startOAuthFlow("/api/me/integrations/jira/start");
+    void startOAuthFlow(
+      "/api/me/integrations/jira/start",
+      buildMockOAuthOptions("jira", loads, onWorkspaceSourcesChanged),
+    );
   }
   async function handleConnectJiraSite(site: JiraSite) {
     setJiraLoading(true);
@@ -162,22 +221,6 @@ export function useWorkspaceConnectorHandlersIntegrations({
       setJiraLoading(false);
     }
   }
-  async function handleSyncJiraSource(sourceId: string) {
-    setJiraLoading(true);
-    setConnectorError(null);
-    try {
-      await postJson<undefined, WorkspaceJiraSource>(
-        `/api/workspaces/${workspace.workspace_id}/jira/sources/${sourceId}/sync`,
-      );
-      setConnectorStatus("Jira source synced.");
-      await loadJiraSources();
-    } catch (error) {
-      handleApiError(error, setConnectorError);
-      await loadJiraSources();
-    } finally {
-      setJiraLoading(false);
-    }
-  }
   async function handleRemoveJiraSource(sourceId: string) {
     setJiraLoading(true);
     setConnectorError(null);
@@ -198,7 +241,10 @@ export function useWorkspaceConnectorHandlersIntegrations({
     const params = new URLSearchParams({
       workspace_id: workspace.workspace_id,
     });
-    void startOAuthFlow(`/api/me/integrations/slack/start?${params.toString()}`);
+    void startOAuthFlow(
+      `/api/me/integrations/slack/start?${params.toString()}`,
+      buildMockOAuthOptions("slack", loads, onWorkspaceSourcesChanged),
+    );
   }
   async function handleSlackDisconnect(teamId?: string) {
     setSlackLoading(true);
@@ -255,22 +301,6 @@ export function useWorkspaceConnectorHandlersIntegrations({
       setSlackLoading(false);
     }
   }
-  async function handleSyncSlackSource(sourceId: string) {
-    setSlackLoading(true);
-    setConnectorError(null);
-    try {
-      await postJson<undefined, WorkspaceSlackSource>(
-        `/api/workspaces/${workspace.workspace_id}/slack/sources/${sourceId}/sync`,
-      );
-      setConnectorStatus("Slack source synced.");
-      await loadSlackSources();
-    } catch (error) {
-      handleApiError(error, setConnectorError);
-      await loadSlackSources();
-    } finally {
-      setSlackLoading(false);
-    }
-  }
   async function handleRemoveSlackSource(sourceId: string) {
     setSlackLoading(true);
     setConnectorError(null);
@@ -288,7 +318,10 @@ export function useWorkspaceConnectorHandlersIntegrations({
     }
   }
   function handleLinearConnect() {
-    void startOAuthFlow("/api/me/integrations/linear/start");
+    void startOAuthFlow(
+      "/api/me/integrations/linear/start",
+      buildMockOAuthOptions("linear", loads, onWorkspaceSourcesChanged),
+    );
   }
   async function handleLinearDisconnect() {
     setLinearLoading(true);
@@ -359,7 +392,10 @@ export function useWorkspaceConnectorHandlersIntegrations({
     }
   }
   function handleConfluenceConnect() {
-    void startOAuthFlow("/api/me/integrations/confluence/start");
+    void startOAuthFlow(
+      "/api/me/integrations/confluence/start",
+      buildMockOAuthOptions("confluence", loads, onWorkspaceSourcesChanged),
+    );
   }
   async function handleConfluenceDisconnect() {
     setConfluenceLoading(true);
@@ -428,7 +464,10 @@ export function useWorkspaceConnectorHandlersIntegrations({
     }
   }
   function handleNotionConnect() {
-    void startOAuthFlow("/api/me/integrations/notion/start");
+    void startOAuthFlow(
+      "/api/me/integrations/notion/start",
+      buildMockOAuthOptions("notion", loads, onWorkspaceSourcesChanged),
+    );
   }
   async function handleNotionDisconnect() {
     setNotionLoading(true);
@@ -501,13 +540,11 @@ export function useWorkspaceConnectorHandlersIntegrations({
     handleConnectJiraSite,
     handleRemoveJiraSite,
     handleAddJiraProject,
-    handleSyncJiraSource,
     handleRemoveJiraSource,
     handleSlackConnect,
     handleSlackDisconnect,
     handleSlackUnlinkTeam,
     handleAddSlackChannel,
-    handleSyncSlackSource,
     handleRemoveSlackSource,
     handleLinearConnect,
     handleLinearDisconnect,

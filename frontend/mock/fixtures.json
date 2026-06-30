@@ -21,6 +21,21 @@
       "can_manage": false
     }
   ],
+  "notifications": [
+    {
+      "notification_id": "notif-1",
+      "recipient_user_id": "user-alex",
+      "type": "workspace_member_left",
+      "title": "Member left workspace",
+      "body": "Jordan stepped off the workspace after handing off connector docs. Review shared access if anything still routes through them.",
+      "workspace_id": "ws-alpha",
+      "workspace_name": "Project Alpha",
+      "actor_user_id": "user-jordan",
+      "actor_name": "Jordan Lee",
+      "read": false,
+      "created_at": "2026-06-20T10:00:00Z"
+    }
+  ],
   "invites": {
     "received": [
       {
@@ -144,7 +159,20 @@
         {
           "user_id": "user-alex",
           "email": "alex@readbase.dev",
-          "name": "Alex Chen"
+          "name": "Alex Chen",
+          "is_owner": true
+        },
+        {
+          "user_id": "user-sam",
+          "email": "sam@readbase.dev",
+          "name": "Sam Rivera",
+          "is_owner": false
+        },
+        {
+          "user_id": "user-jordan",
+          "email": "jordan@readbase.dev",
+          "name": "Jordan Lee",
+          "is_owner": false
         }
       ]
     },
@@ -172,17 +200,23 @@
     "github": {
       "connected": false,
       "configured": true,
-      "scopes": ["repo"]
+      "scopes": [
+        "repo"
+      ]
     },
     "bitbucket": {
       "connected": false,
       "configured": true,
-      "scopes": ["repository"]
+      "scopes": [
+        "repository"
+      ]
     },
     "gitlab": {
       "connected": false,
       "configured": true,
-      "scopes": ["read_api"]
+      "scopes": [
+        "read_api"
+      ]
     },
     "jira": {
       "connected": false,
@@ -224,14 +258,49 @@
     "confluence": [],
     "notion": []
   },
+  "additionalDocuments": {
+    "ws-alpha": [
+      {
+        "document_id": "doc-onboarding",
+        "name": "onboarding-checklist.pdf",
+        "created_at": "2026-06-20T10:00:00.000Z",
+        "uploaded_by_user_id": "user-alex",
+        "assigned_user_ids": ["user-alex", "user-sam"]
+      },
+      {
+        "document_id": "doc-architecture",
+        "name": "architecture-notes.md",
+        "created_at": "2026-06-22T14:30:00.000Z",
+        "uploaded_by_user_id": "user-alex",
+        "assigned_user_ids": ["user-alex"]
+      }
+    ],
+    "ws-beta": []
+  },
   "emptyLists": {
-    "githubRepos": { "repos": [] },
-    "bitbucketRepos": { "repos": [] },
-    "gitlabProjects": { "projects": [] },
-    "jiraProjects": { "projects": [] },
-    "slackChannels": { "channels": [] },
-    "linearSources": { "sources": [] },
-    "confluenceSpaces": { "spaces": [] },
-    "notionDatabases": { "databases": [] }
+    "githubRepos": {
+      "repos": []
+    },
+    "bitbucketRepos": {
+      "repos": []
+    },
+    "gitlabProjects": {
+      "projects": []
+    },
+    "jiraProjects": {
+      "projects": []
+    },
+    "slackChannels": {
+      "channels": []
+    },
+    "linearSources": {
+      "sources": []
+    },
+    "confluenceSpaces": {
+      "spaces": []
+    },
+    "notionDatabases": {
+      "databases": []
+    }
   }
 }

@@ -33,7 +33,6 @@ export type ConnectorSetupModalProps = {
   repoUrl: string;
   refreshRepo: boolean;
   indexing: boolean;
-  status: string;
   error: string | null;
   githubConnection: GithubConnection | null;
   githubRepositories: GithubRepository[];
@@ -95,14 +94,12 @@ export type ConnectorSetupModalProps = {
   onJiraProjectQueryChange: (query: string) => void;
   onJiraProjectSearch: () => void;
   onAddJiraProject: (project: JiraProject) => void;
-  onSyncJiraSource: (sourceId: string) => void;
   onRemoveJiraSource: (sourceId: string) => void;
   onSlackConnect: () => void;
   onSlackDisconnect: (teamId?: string) => void;
   onSlackUnlinkTeam: (teamId: string) => void;
   onSlackChannelQueryChange: (query: string) => void;
   onAddSlackChannel: (channel: SlackChannel) => void;
-  onSyncSlackSource: (sourceId: string) => void;
   onRemoveSlackSource: (sourceId: string) => void;
   onLinearConnect: () => void;
   onLinearDisconnect: () => void;
@@ -126,4 +123,5 @@ export type ConnectorSetupModalProps = {
   onSyncNotionSource: (sourceId: string) => void;
   onRemoveNotionSource: (sourceId: string) => void;
   onClose: () => void;
+  onRequestClose?: () => void;
 };

@@ -279,7 +279,11 @@ export function isConnectorConnected(connectorId: ConnectorId, connections: Conn
     return false;
   }
   if (connectorId === "slack") {
-    return Boolean(input?.slackTeams?.length);
+    const slackConnection = connections.slack;
+    return Boolean(
+      input?.slackTeams?.length ||
+        (slackConnection?.connected && (slackConnection.teams?.length ?? 0) > 0),
+    );
   }
   return Boolean((connection as { connected?: boolean }).connected);
 }

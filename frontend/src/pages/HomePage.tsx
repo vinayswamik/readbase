@@ -1,122 +1,64 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 
 import { fetchJson } from "../api";
+import { AppTopbar } from "../components/AppTopbar";
+import type { AppRoute } from "../navigation/appRoute";
 import type { AuthUser, Workspace, WorkspacesResponse } from "../types";
-import type { MockRoute } from "../mock/navigation";
+import { HomeAccountMenu } from "./homepage/HomeAccountMenu";
+import { HomeConnectorMarquee } from "./homepage/HomeConnectorMarquee";
+import { HomeNotificationsMenu } from "./homepage/HomeNotificationsMenu";
 import { InvitesModal } from "./homepage/InvitesModal";
 import { isPendingInvite } from "./homepage/InviteCard";
 import { useWorkspaceInvites } from "./homepage/useWorkspaceInvites";
 import { WorkspaceChatPage } from "./WorkspaceChatPage";
 import { WorkspaceDashboardPage } from "./WorkspaceDashboardPage";
 
-const SELECTED_WORKSPACE_STORAGE_KEY = "readbase:selectedWorkspace";
-
 export function HomePage({
   user,
   loading,
   onLogout,
   onSessionExpired,
-  mockRoute,
-  onMockNavigate,
+  appRoute,
+  onNavigate,
+  onReplaceNavigate,
 }: {
   user: AuthUser;
   loading: boolean;
   onLogout: () => void;
   onSessionExpired: () => void;
-  mockRoute?: MockRoute;
-  onMockNavigate?: (route: MockRoute) => void;
+  appRoute: AppRoute;
+  onNavigate: (route: AppRoute) => void;
+  onReplaceNavigate: (route: AppRoute) => void;
 }) {
-  const mockNavigation = Boolean(mockRoute && onMockNavigate);
-  const [selectedWorkspace, setSelectedWorkspaceState] = useState<Workspace | null>(() =>
-    mockNavigation ? null : readStoredWorkspace(),
-  );
-  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const [invitesOpen, setInvitesOpen] = useState(
-    () => mockRoute?.screen === "workspace" && mockRoute.panel === "invites",
-  );
+  const [selectedWorkspace, setSelectedWorkspaceState] = useState<Workspace | null>(null);
+  const [invitesOpen, setInvitesOpen] = useState(false);
   const [workspaceRefreshKey, setWorkspaceRefreshKey] = useState(0);
-  const [sourcesOpen, setSourcesOpen] = useState(
-    () => mockRoute?.screen === "workspace" && mockRoute.panel === "sources",
-  );
-  const accountMenuRef = useRef<HTMLDivElement | null>(null);
   const invites = useWorkspaceInvites(onSessionExpired);
 
   function setSelectedWorkspace(workspace: Workspace | null) {
     setSelectedWorkspaceState(workspace);
-    if (mockNavigation && onMockNavigate) {
-      if (workspace) {
-        onMockNavigate({ screen: "workspace", workspaceId: workspace.workspace_id });
-      } else {
-        onMockNavigate({ screen: "workspaces" });
-      }
+    if (!workspace) {
+      onNavigate({ screen: "workspaces" });
       return;
     }
-    if (workspace) {
-      window.sessionStorage.setItem(
-        SELECTED_WORKSPACE_STORAGE_KEY,
-        JSON.stringify(workspace),
-      );
-    } else {
-      window.sessionStorage.removeItem(SELECTED_WORKSPACE_STORAGE_KEY);
-    }
+    setInvitesOpen(false);
+    onNavigate({
+      screen: "workspace",
+      workspaceId: workspace.workspace_id,
+    });
   }
 
   function openInvitesPanel() {
     setInvitesOpen(true);
-    if (mockNavigation && mockRoute?.screen === "workspace" && onMockNavigate) {
-      onMockNavigate({
-        screen: "workspace",
-        workspaceId: mockRoute.workspaceId,
-        panel: "invites",
-      });
-    }
   }
 
   function closeInvitesPanel() {
     setInvitesOpen(false);
-    if (mockNavigation && mockRoute?.screen === "workspace" && onMockNavigate) {
-      onMockNavigate({
-        screen: "workspace",
-        workspaceId: mockRoute.workspaceId,
-      });
-    }
-  }
-
-  function openSourcesPanel() {
-    setSourcesOpen(true);
-    if (mockNavigation && mockRoute?.screen === "workspace" && onMockNavigate) {
-      onMockNavigate({
-        screen: "workspace",
-        workspaceId: mockRoute.workspaceId,
-        panel: "sources",
-      });
-    }
-  }
-
-  function setSourcesPanelOpen(open: boolean) {
-    setSourcesOpen(open);
-    if (!mockNavigation || mockRoute?.screen !== "workspace" || !onMockNavigate) {
-      return;
-    }
-    onMockNavigate({
-      screen: "workspace",
-      workspaceId: mockRoute.workspaceId,
-      panel: open ? "sources" : undefined,
-    });
   }
 
   const refreshInvites = useCallback(async () => {
     await invites.loadInvites();
   }, [invites.loadInvites]);
-
-  const workspaceReceived = useMemo(() => {
-    if (!selectedWorkspace) {
-      return [];
-    }
-    return invites.received.filter(
-      (invite) => invite.workspace_id === selectedWorkspace.workspace_id,
-    );
-  }, [invites.received, selectedWorkspace]);
 
   const workspaceSent = useMemo(() => {
     if (!selectedWorkspace) {
@@ -125,49 +67,60 @@ export function HomePage({
     return invites.sent.filter((invite) => invite.workspace_id === selectedWorkspace.workspace_id);
   }, [invites.sent, selectedWorkspace]);
 
-  const workspacePendingCount = useMemo(
-    () =>
-      workspaceReceived.filter((invite) => isPendingInvite(invite)).length +
-      workspaceSent.filter((invite) => isPendingInvite(invite)).length,
-    [workspaceReceived, workspaceSent],
+  const homePendingReceivedCount = invites.pendingReceived.length;
+
+  const workspaceSentPendingCount = useMemo(
+    () => workspaceSent.filter((invite) => isPendingInvite(invite)).length,
+    [workspaceSent],
   );
 
-  const modalInvites = useMemo(
-    () => ({
+  const invitesModalScope = selectedWorkspace ? "sent" : "received";
+
+  const modalInvites = useMemo(() => {
+    if (selectedWorkspace) {
+      return {
+        ...invites,
+        received: [],
+        sent: workspaceSent,
+      };
+    }
+    return {
       ...invites,
-      received: invites.linkPreview ? [invites.linkPreview, ...workspaceReceived] : workspaceReceived,
-      sent: workspaceSent,
-    }),
-    [invites, workspaceReceived, workspaceSent],
-  );
+      sent: [],
+    };
+  }, [invites, selectedWorkspace, workspaceSent]);
 
   useEffect(() => {
-    if (!mockNavigation || !mockRoute) {
+    if (appRoute.screen !== "login") {
       return;
     }
+    onReplaceNavigate({ screen: "workspaces" });
+  }, [appRoute.screen, onReplaceNavigate]);
 
-    if (mockRoute.screen === "workspaces") {
+  useEffect(() => {
+    if (appRoute.screen === "workspaces") {
       setSelectedWorkspaceState(null);
       setInvitesOpen(false);
-      setSourcesOpen(false);
       return;
     }
 
-    if (mockRoute.screen !== "workspace") {
+    if (appRoute.screen !== "workspace") {
       return;
     }
 
-    setInvitesOpen(mockRoute.panel === "invites");
-    setSourcesOpen(mockRoute.panel === "sources");
+    setInvitesOpen(false);
 
     let cancelled = false;
     void (async () => {
       try {
         const result = await fetchJson<WorkspacesResponse>("/api/workspaces");
         const workspace =
-          result.workspaces?.find((entry) => entry.workspace_id === mockRoute.workspaceId) ?? null;
+          result.workspaces?.find((entry) => entry.workspace_id === appRoute.workspaceId) ?? null;
         if (!cancelled) {
           setSelectedWorkspaceState(workspace);
+          if (!workspace) {
+            onNavigate({ screen: "workspaces" });
+          }
         }
       } catch {
         if (!cancelled) {
@@ -179,14 +132,11 @@ export function HomePage({
     return () => {
       cancelled = true;
     };
-  }, [mockNavigation, mockRoute]);
+  }, [appRoute, onNavigate]);
 
   useEffect(() => {
-    if (!selectedWorkspace) {
-      return;
-    }
     void refreshInvites();
-  }, [refreshInvites, selectedWorkspace?.workspace_id]);
+  }, [refreshInvites]);
 
   useEffect(() => {
     if (!user) {
@@ -198,15 +148,14 @@ export function HomePage({
     }
     void invites.openLinkInvite(joinToken).then((preview) => {
       if (preview) {
+        setSelectedWorkspaceState(null);
+        onReplaceNavigate({ screen: "workspaces" });
         setInvitesOpen(true);
       }
     });
-  }, [user, invites.openLinkInvite]);
+  }, [user, invites.openLinkInvite, onReplaceNavigate]);
 
   useEffect(() => {
-    if (!selectedWorkspace) {
-      return;
-    }
     const refreshOnFocus = () => {
       void refreshInvites();
     };
@@ -219,137 +168,86 @@ export function HomePage({
       window.removeEventListener("focus", refreshOnFocus);
       window.removeEventListener("readbase:invites-changed", refreshOnInviteChange);
     };
-  }, [refreshInvites, selectedWorkspace?.workspace_id]);
-
-  useEffect(() => {
-    if (!accountMenuOpen) {
-      return;
-    }
-    const handleDocumentClick = (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) {
-        return;
-      }
-      if (!accountMenuRef.current?.contains(target)) {
-        setAccountMenuOpen(false);
-      }
-    };
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setAccountMenuOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleDocumentClick);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleDocumentClick);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [accountMenuOpen]);
-
-  const accountInitial = (user.name || user.email || "U").trim().charAt(0).toUpperCase();
+  }, [refreshInvites]);
 
   return (
     <main className="home-page">
-      <header className="home-topbar">
-        <div>
-          <span className="brand-badge">Readbase</span>
-          <p className="home-user">
-            {selectedWorkspace ? selectedWorkspace.name : "Codebase Q&A workspace"}
-          </p>
-        </div>
+      <AppTopbar
+        sticky
+        workspaceNav={
+          selectedWorkspace
+            ? {
+                workspaceId: selectedWorkspace.workspace_id,
+                name: selectedWorkspace.name,
+                canManage: selectedWorkspace.can_manage,
+                onGoToWorkspaces: () => setSelectedWorkspace(null),
+                onRenamed: (workspace) => setSelectedWorkspaceState(workspace),
+                onSessionExpired,
+              }
+            : undefined
+        }
+      >
         <div className="home-topbar-actions">
           {selectedWorkspace ? (
-            <>
-              <button
-                type="button"
-                className="secondary-action-button home-sources-button home-invites-button"
-                onClick={openInvitesPanel}
-              >
-                Invites
-                {workspacePendingCount ? (
-                  <span className="home-invites-badge">{workspacePendingCount}</span>
-                ) : null}
-              </button>
-              <button
-                type="button"
-                className="secondary-action-button home-sources-button"
-                onClick={openSourcesPanel}
-              >
-                Sources
-              </button>
-            </>
-          ) : null}
-          <div className="account-menu" ref={accountMenuRef}>
             <button
               type="button"
-              className="account-trigger"
-              aria-haspopup="menu"
-              aria-expanded={accountMenuOpen}
-              aria-label="Open account menu"
-              onClick={() => setAccountMenuOpen((open) => !open)}
+              className="secondary-action-button home-sources-button home-invites-button"
+              onClick={openInvitesPanel}
             >
-              {accountInitial}
+              Invites
+              {workspaceSentPendingCount ? (
+                <span className="home-invites-badge">{workspaceSentPendingCount}</span>
+              ) : null}
             </button>
-            {accountMenuOpen ? (
-              <div className="account-popover" role="menu">
-                <p className="account-name">{user.name}</p>
-                <p className="account-email">{user.email}</p>
-                <button
-                  type="button"
-                  className="account-signout"
-                  onClick={onLogout}
-                  disabled={loading}
-                >
-                  {loading ? "Signing out..." : "Sign out"}
-                </button>
-              </div>
-            ) : null}
-          </div>
+          ) : (
+            <button
+              type="button"
+              className="secondary-action-button home-sources-button home-invites-button"
+              onClick={openInvitesPanel}
+            >
+              Invites
+              {homePendingReceivedCount ? (
+                <span className="home-invites-badge">{homePendingReceivedCount}</span>
+              ) : null}
+            </button>
+          )}
+          <HomeNotificationsMenu onSessionExpired={onSessionExpired} />
+          <HomeAccountMenu user={user} loading={loading} onLogout={onLogout} />
         </div>
-      </header>
+      </AppTopbar>
 
-      <div className="home-page-main">
+      <div className="home-page-main page-body-surface">
         {selectedWorkspace ? (
-          <>
-            <WorkspaceChatPage
-              key={selectedWorkspace.workspace_id}
-              user={user}
-              workspace={selectedWorkspace}
-              onBack={() => setSelectedWorkspace(null)}
-              onSessionExpired={onSessionExpired}
-              sourcesOpen={sourcesOpen}
-              onSourcesOpenChange={setSourcesPanelOpen}
-            />
-          </>
+          <WorkspaceChatPage
+            key={selectedWorkspace.workspace_id}
+            user={user}
+            workspace={selectedWorkspace}
+            onBack={() => setSelectedWorkspace(null)}
+            onSessionExpired={onSessionExpired}
+          />
         ) : (
-          <div className="home-content-shell">
+          <div className="home-content-body">
             <WorkspaceDashboardPage
               key={workspaceRefreshKey}
               onSelectWorkspace={setSelectedWorkspace}
               onSessionExpired={onSessionExpired}
               onLeaveWorkspace={(workspace) => {
-                if (mockNavigation) {
-                  return;
-                }
-                const stored = readStoredWorkspace();
-                if (stored?.workspace_id === workspace.workspace_id) {
+                if (appRoute.screen === "workspace" && appRoute.workspaceId === workspace.workspace_id) {
                   setSelectedWorkspace(null);
                 }
               }}
             />
+            <HomeConnectorMarquee />
           </div>
         )}
       </div>
-      {selectedWorkspace || invites.linkPreview ? (
-        <InvitesModal
-          open={invitesOpen}
-          onClose={closeInvitesPanel}
-          invites={modalInvites}
-          onInviteChanged={() => setWorkspaceRefreshKey((current) => current + 1)}
-        />
-      ) : null}
+      <InvitesModal
+        open={invitesOpen}
+        onClose={closeInvitesPanel}
+        invites={modalInvites}
+        scope={invitesModalScope}
+        onInviteChanged={() => setWorkspaceRefreshKey((current) => current + 1)}
+      />
     </main>
   );
 }
@@ -364,26 +262,4 @@ function readJoinTokenFromUrl(): string | null {
   const nextSearch = url.searchParams.toString();
   window.history.replaceState({}, "", `${url.pathname}${nextSearch ? `?${nextSearch}` : ""}${url.hash}`);
   return joinToken;
-}
-
-function readStoredWorkspace(): Workspace | null {
-  try {
-    const storedWorkspace = window.sessionStorage.getItem(SELECTED_WORKSPACE_STORAGE_KEY);
-    if (!storedWorkspace) {
-      return null;
-    }
-    const parsed = JSON.parse(storedWorkspace) as Partial<Workspace>;
-    if (
-      typeof parsed.workspace_id === "string" &&
-      typeof parsed.owner_user_id === "string" &&
-      typeof parsed.name === "string" &&
-      typeof parsed.created_at === "string" &&
-      typeof parsed.can_manage === "boolean"
-    ) {
-      return parsed as Workspace;
-    }
-  } catch {
-    window.sessionStorage.removeItem(SELECTED_WORKSPACE_STORAGE_KEY);
-  }
-  return null;
 }

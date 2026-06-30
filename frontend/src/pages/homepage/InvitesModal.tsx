@@ -6,15 +6,19 @@ import type { useWorkspaceInvites } from "./useWorkspaceInvites";
 
 type InvitesState = ReturnType<typeof useWorkspaceInvites>;
 
+export type InvitesModalScope = "received" | "sent";
+
 export function InvitesModal({
   open,
   onClose,
   invites,
+  scope,
   onInviteChanged,
 }: {
   open: boolean;
   onClose: () => void;
   invites: InvitesState;
+  scope: InvitesModalScope;
   onInviteChanged?: () => void;
 }) {
   const {
@@ -93,6 +97,8 @@ export function InvitesModal({
   }
 
   const showContent = received.length > 0 || sent.length > 0 || !loading;
+  const showReceived = scope === "received";
+  const showSent = scope === "sent";
 
   return createPortal(
     <div
@@ -110,7 +116,11 @@ export function InvitesModal({
         <header className="invites-modal-header">
           <div className="invites-modal-header-copy">
             <h2 id="invites-title">Invites</h2>
-            <p>Pending invitations you received or sent.</p>
+            <p>
+              {showReceived
+                ? "Pending invitations sent to you."
+                : "Pending invitations you sent from this workspace."}
+            </p>
           </div>
           <button
             type="button"
@@ -127,31 +137,35 @@ export function InvitesModal({
 
         {showContent ? (
           <div className="invites-modal-body">
-            <InviteSection title="Received" invites={received} emptyLabel="No pending invites for you.">
-              {(invite) => (
-                <InviteCard
-                  invite={invite}
-                  variant="received"
-                  actionInviteId={actionInviteId}
-                  onAccept={handleAccept}
-                  onReject={(inviteId) => {
-                    void handleReject(inviteId);
-                  }}
-                />
-              )}
-            </InviteSection>
-            <InviteSection title="Sent" invites={sent} emptyLabel="No pending invites sent by you.">
-              {(invite) => (
-                <InviteCard
-                  invite={invite}
-                  variant="sent"
-                  actionInviteId={actionInviteId}
-                  onRevert={(inviteId) => {
-                    void handleRevert(inviteId);
-                  }}
-                />
-              )}
-            </InviteSection>
+            {showReceived ? (
+              <InviteSection title="Received" invites={received} emptyLabel="No pending invites for you.">
+                {(invite) => (
+                  <InviteCard
+                    invite={invite}
+                    variant="received"
+                    actionInviteId={actionInviteId}
+                    onAccept={handleAccept}
+                    onReject={(inviteId) => {
+                      void handleReject(inviteId);
+                    }}
+                  />
+                )}
+              </InviteSection>
+            ) : null}
+            {showSent ? (
+              <InviteSection title="Sent" invites={sent} emptyLabel="No pending invites sent by you.">
+                {(invite) => (
+                  <InviteCard
+                    invite={invite}
+                    variant="sent"
+                    actionInviteId={actionInviteId}
+                    onRevert={(inviteId) => {
+                      void handleRevert(inviteId);
+                    }}
+                  />
+                )}
+              </InviteSection>
+            ) : null}
           </div>
         ) : null}
       </section>

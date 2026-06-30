@@ -223,6 +223,24 @@ class WorkspaceInvite(Base):
     workspace: Mapped[Workspace] = relationship("Workspace", back_populates="invites")
 
 
+class UserNotification(Base):
+    __tablename__ = "user_notifications"
+
+    notification_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    recipient_user_id: Mapped[str] = mapped_column(
+        String(255), ForeignKey("users.user_id"), nullable=False, index=True
+    )
+    type: Mapped[str] = mapped_column(String(64), nullable=False)
+    workspace_id: Mapped[str] = mapped_column(String(96), nullable=False, index=True)
+    workspace_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    actor_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    actor_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False, index=True
+    )
+
+
 class OrgSource(Base):
     __tablename__ = "org_sources"
     __table_args__ = (

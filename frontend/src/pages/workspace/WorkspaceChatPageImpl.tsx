@@ -1,33 +1,50 @@
-import { useState } from "react";
+import { useCallback, useRef, useState, type MouseEvent } from "react";
 
 import type { AuthUser, Workspace } from "../../types";
 import { AppToast } from "../../components/AppToast";
 import { WorkspaceChatBox } from "../WorkspaceChatBox";
 import { WorkspaceGraphCanvas } from "../WorkspaceGraphCanvas";
+import { AdditionalDocumentManageContent } from "./AdditionalDocumentManageModal";
 import { ConnectorSetupModal } from "./connectors/ConnectorSetupModal";
 import type { ConnectorSetupModalProps } from "./connectors/ConnectorSetupModalTypes";
+import {
+  computeManageAnchorFromButton,
+  type ConnectorModalDockAnchor,
+} from "./connectors/connectorModalPosition";
 import type { ConnectorId } from "./connectors/connectors";
-import { WorkspaceSourcesModal } from "./WorkspaceSourcesModal";
+import {
+  DockedManageFlyoutShell,
+  type DockedManageFlyoutVariant,
+} from "./DockedManageFlyoutShell";
+import { WorkspaceSourcesPanel } from "./WorkspaceSourcesPanel";
 import { useWorkspaceApiError, useWorkspaceChat, useWorkspaceRepos } from "./chat/useWorkspaceReposAndChat";
 import { useWorkspaceConnectors } from "./connectors/useWorkspaceConnectors";
 import { GraphAddNodeModal, GraphEditNodeModal } from "./graph/GraphNodeModals";
 import { useWorkspaceGraph } from "./graph/useWorkspaceGraph";
+import { useWorkspaceAdditionalDocuments } from "./useWorkspaceAdditionalDocuments";
+import type { WorkspaceAdditionalDocument } from "./workspaceAdditionalDocuments";
+
+type ManageFlyoutKind = DockedManageFlyoutVariant | null;
 
 export function WorkspaceChatPageImpl({
   user,
   workspace,
   onBack,
   onSessionExpired,
-  sourcesOpen,
-  onSourcesOpenChange,
 }: {
   user: AuthUser;
   workspace: Workspace;
   onBack: () => void;
   onSessionExpired: () => void;
-  sourcesOpen: boolean;
-  onSourcesOpenChange: (open: boolean) => void;
 }) {
+  const [sourcesRefreshKey, setSourcesRefreshKey] = useState(0);
+  const [sourcesPanelOpen, setSourcesPanelOpen] = useState(true);
+  const [manageFlyoutKind, setManageFlyoutKind] = useState<ManageFlyoutKind>(null);
+  const [manageFlyoutAnchor, setManageFlyoutAnchor] = useState<ConnectorModalDockAnchor | null>(null);
+  const requestManageFlyoutCloseRef = useRef<(() => void) | null>(null);
+  const handleManageFlyoutAnimatedCloseChange = useCallback((requestClose: (() => void) | null) => {
+    requestManageFlyoutCloseRef.current = requestClose;
+  }, []);
   const handleApiError = useWorkspaceApiError(onSessionExpired);
   const repos = useWorkspaceRepos({ workspace, onBack, handleApiError });
   const chat = useWorkspaceChat({
@@ -45,6 +62,10 @@ export function WorkspaceChatPageImpl({
     onWorkspaceSourcesChanged: () => {
       setSourcesRefreshKey((current) => current + 1);
     },
+  });
+  const additionalDocuments = useWorkspaceAdditionalDocuments({
+    workspaceId: workspace.workspace_id,
+    onSessionExpired,
   });
 
   const { repoId, repoListError, selectedRepo } = repos;
@@ -98,26 +119,63 @@ export function WorkspaceChatPageImpl({
     handleNodeClick,
     handleOpenEditNode,
     handleZoom,
-    setViewport,
+    centerViewport,
   } = graph;
   const { activeConnector, openConnectorModal, closeConnectorModal, ...connectorModalProps } =
     connectors;
-  const [sourcesRefreshKey, setSourcesRefreshKey] = useState(0);
 
-  function handleManageConnector(connectorId: ConnectorId) {
+  function handleCloseManageFlyout() {
+    const closingFlyoutKind = manageFlyoutKind;
+    setManageFlyoutKind(null);
+    setManageFlyoutAnchor(null);
+    closeConnectorModal();
+    additionalDocuments.clearManagedDocument();
+    if (closingFlyoutKind === "connector") {
+      setSourcesRefreshKey((current) => current + 1);
+    }
+  }
+
+  function handleManageConnector(connectorId: ConnectorId, event: MouseEvent<HTMLButtonElement>) {
+    if (manageFlyoutKind === "connector" && activeConnector?.id === connectorId) {
+      requestManageFlyoutCloseRef.current?.();
+      return;
+    }
+    setManageFlyoutAnchor(computeManageAnchorFromButton(event.currentTarget));
+    setManageFlyoutKind("connector");
+    additionalDocuments.clearManagedDocument();
     openConnectorModal(connectorId);
+  }
+
+  function handleManageDocument(
+    document: WorkspaceAdditionalDocument,
+    event: MouseEvent<HTMLButtonElement>,
+  ) {
+    if (
+      manageFlyoutKind === "document" &&
+      additionalDocuments.managedDocument?.document_id === document.document_id
+    ) {
+      requestManageFlyoutCloseRef.current?.();
+      return;
+    }
+    setManageFlyoutAnchor(computeManageAnchorFromButton(event.currentTarget));
+    setManageFlyoutKind("document");
+    closeConnectorModal();
+    additionalDocuments.setManagedDocument(document);
+    additionalDocuments.setError(null);
+  }
+
+  async function handleDeleteManagedDocument() {
+    const deleted = await additionalDocuments.handleDeleteManagedDocument();
+    if (deleted) {
+      requestManageFlyoutCloseRef.current?.();
+    }
   }
 
   function handleConnectConnector(connectorId: ConnectorId) {
     connectors.handleConnectConnector(connectorId);
   }
 
-  function handleCloseConnectorModal() {
-    closeConnectorModal();
-    if (sourcesOpen) {
-      setSourcesRefreshKey((current) => current + 1);
-    }
-  }
+  const manageFlyoutOpen = manageFlyoutKind !== null;
 
   const appToastMessage =
     connectorModalProps.connectorError ||
@@ -132,7 +190,6 @@ export function WorkspaceChatPageImpl({
     repoUrl: connectorModalProps.connectorRepoUrl,
     refreshRepo: connectorModalProps.connectorRefreshRepo,
     indexing: connectorModalProps.indexing,
-    status: connectorModalProps.connectorStatus,
     error: connectorModalProps.connectorError,
     githubConnection: connectorModalProps.githubConnection,
     githubRepositories: connectorModalProps.githubRepositories,
@@ -203,14 +260,12 @@ export function WorkspaceChatPageImpl({
     onJiraProjectSearch: () =>
       connectorModalProps.loadJiraProjects(connectorModalProps.jiraProjectQuery),
     onAddJiraProject: connectorModalProps.handleAddJiraProject,
-    onSyncJiraSource: connectorModalProps.handleSyncJiraSource,
     onRemoveJiraSource: connectorModalProps.handleRemoveJiraSource,
     onSlackConnect: connectorModalProps.handleSlackConnect,
     onSlackDisconnect: connectorModalProps.handleSlackDisconnect,
     onSlackUnlinkTeam: connectorModalProps.handleSlackUnlinkTeam,
     onSlackChannelQueryChange: connectorModalProps.setSlackChannelQuery,
     onAddSlackChannel: connectorModalProps.handleAddSlackChannel,
-    onSyncSlackSource: connectorModalProps.handleSyncSlackSource,
     onRemoveSlackSource: connectorModalProps.handleRemoveSlackSource,
     onLinearConnect: connectorModalProps.handleLinearConnect,
     onLinearDisconnect: connectorModalProps.handleLinearDisconnect,
@@ -238,60 +293,98 @@ export function WorkspaceChatPageImpl({
     onAddNotionDatabase: connectorModalProps.handleAddNotionDatabase,
     onSyncNotionSource: connectorModalProps.handleSyncNotionSource,
     onRemoveNotionSource: connectorModalProps.handleRemoveNotionSource,
-    onClose: handleCloseConnectorModal,
+    onClose: handleCloseManageFlyout,
+    onRequestClose: () => requestManageFlyoutCloseRef.current?.(),
   };
 
   return (
     <section className="graph-workspace">
-      <WorkspaceGraphCanvas
-        workspaceName={workspace.name}
-        graphRevision={graphRevision}
-        boardRef={boardRef}
-        nodes={nodes}
-        visibleNodes={visibleNodes}
-        selectedNodeId={selectedNodeId}
-        nodeEditAnchor={nodeEditAnchor}
-        viewport={viewport}
-        edgeSegments={edgeSegments}
-        chatOpen={chatOpen}
-        messageCount={messages.length}
-        onBack={onBack}
-        onAddNode={() => setAddNodeModalOpen(true)}
-        onZoom={handleZoom}
-        onViewportReset={() => setViewport({ x: 120, y: 80, scale: 1 })}
-        onBoardMouseDown={handleBoardMouseDown}
-        onBoardMouseMove={handleBoardMouseMove}
-        onBoardMouseUp={handleBoardMouseUp}
-        onNodeClick={handleNodeClick}
-        onEditNode={handleOpenEditNode}
-        onOpenChat={() => setChatOpen(true)}
+      <div className="graph-workspace-layout">
+        <WorkspaceSourcesPanel
+          workspace={workspace}
+          refreshKey={sourcesRefreshKey}
+          collapsed={!sourcesPanelOpen}
+          onToggleCollapsed={() => setSourcesPanelOpen((open) => !open)}
+          onConnect={handleConnectConnector}
+          onManage={handleManageConnector}
+          additionalDocuments={{
+            documents: additionalDocuments.documents,
+            loading: additionalDocuments.loading,
+            uploading: additionalDocuments.uploading,
+            mutating: additionalDocuments.mutating,
+            error: additionalDocuments.error,
+            acceptedDocumentTypes: additionalDocuments.acceptedDocumentTypes,
+            managedDocumentId: additionalDocuments.managedDocument?.document_id ?? null,
+            onFileChange: additionalDocuments.handleFileChange,
+          }}
+          onManageDocument={handleManageDocument}
+          onSessionExpired={onSessionExpired}
+        />
+        <div className="graph-workspace-main">
+          <WorkspaceGraphCanvas
+            graphRevision={graphRevision}
+            boardRef={boardRef}
+            nodes={nodes}
+            visibleNodes={visibleNodes}
+            selectedNodeId={selectedNodeId}
+            nodeEditAnchor={nodeEditAnchor}
+            viewport={viewport}
+            edgeSegments={edgeSegments}
+            chatOpen={chatOpen}
+            messageCount={messages.length}
+            onAddNode={() => setAddNodeModalOpen(true)}
+            onZoom={handleZoom}
+            onViewportReset={() => centerViewport(1)}
+            onBoardMouseDown={handleBoardMouseDown}
+            onBoardMouseMove={handleBoardMouseMove}
+            onBoardMouseUp={handleBoardMouseUp}
+            onNodeClick={handleNodeClick}
+            onEditNode={handleOpenEditNode}
+            onOpenChat={() => setChatOpen(true)}
+          >
+            {chatOpen ? (
+              <WorkspaceChatBox
+                messages={messages}
+                question={question}
+                asking={asking}
+                canAsk={canAsk}
+                selectedRepo={selectedRepo}
+                messageEndRef={messageEndRef}
+                onQuestionChange={setQuestion}
+                onSubmit={handleAskSubmit}
+                onClose={() => setChatOpen(false)}
+              />
+            ) : null}
+          </WorkspaceGraphCanvas>
+        </div>
+      </div>
+      <DockedManageFlyoutShell
+        open={manageFlyoutOpen}
+        variant={manageFlyoutKind === "document" ? "document" : "connector"}
+        dockAnchor={manageFlyoutAnchor}
+        onClose={handleCloseManageFlyout}
+        onAnimatedCloseChange={handleManageFlyoutAnimatedCloseChange}
+        modalClassName={manageFlyoutKind === "document" ? "document-manage-modal" : undefined}
+        ariaLabelledBy={
+          manageFlyoutKind === "document"
+            ? "document-manage-modal-heading"
+            : "connector-modal-heading"
+        }
       >
-        {chatOpen ? (
-          <WorkspaceChatBox
-            messages={messages}
-            question={question}
-            asking={asking}
-            canAsk={canAsk}
-            selectedRepo={selectedRepo}
-            messageEndRef={messageEndRef}
-            onQuestionChange={setQuestion}
-            onSubmit={handleAskSubmit}
-            onClose={() => setChatOpen(false)}
+        {manageFlyoutKind === "connector" && activeConnector ? (
+          <ConnectorSetupModal {...modalProps} connector={activeConnector} />
+        ) : null}
+        {manageFlyoutKind === "document" && additionalDocuments.managedDocument ? (
+          <AdditionalDocumentManageContent
+            managedDocument={additionalDocuments.managedDocument}
+            assignableUsers={additionalDocuments.assignableUsers}
+            mutating={additionalDocuments.mutating}
+            onRequestClose={() => requestManageFlyoutCloseRef.current?.()}
+            onSaveAccess={additionalDocuments.handleSaveAccess}
+            onDelete={handleDeleteManagedDocument}
           />
         ) : null}
-      </WorkspaceGraphCanvas>
-      <WorkspaceSourcesModal
-        open={sourcesOpen}
-        workspace={workspace}
-        refreshKey={sourcesRefreshKey}
-        onClose={() => onSourcesOpenChange(false)}
-        onConnect={handleConnectConnector}
-        onManage={handleManageConnector}
-        onSessionExpired={onSessionExpired}
-      />
-      {activeConnector ? (
-        <ConnectorSetupModal {...modalProps} connector={activeConnector} />
-      ) : null}
+      </DockedManageFlyoutShell>
       <GraphAddNodeModal
         open={addNodeModalOpen}
         canManageWorkspace={canManageWorkspace}

@@ -196,6 +196,38 @@ def resolve_workspace(
         return public_workspace(workspace, actor_user_id=user_id)
 
 
+def update_workspace(owner_id: str, workspace_id: str, name: str) -> dict:
+    normalized_name = normalize_workspace_name(name)
+    name_key = workspace_name_key(normalized_name)
+    normalized_id = workspace_id.strip()
+    if not normalized_id:
+        raise ResourceNotFoundError("Workspace not found.")
+
+    with session_scope() as session:
+        workspace = session.get(Workspace, normalized_id)
+        if workspace is None:
+            raise ResourceNotFoundError("Workspace not found.")
+        if workspace.owner_user_id != owner_id:
+            raise PermissionDeniedError("Workspace owner access required.")
+        if workspace.name_key == name_key:
+            return public_workspace(workspace, actor_user_id=owner_id)
+
+        duplicate = session.scalar(
+            select(Workspace).where(
+                Workspace.owner_user_id == owner_id,
+                Workspace.name_key == name_key,
+                Workspace.workspace_id != normalized_id,
+            )
+        )
+        if duplicate is not None:
+            raise ValidationError("Workspace name already exists.")
+
+        workspace.name = normalized_name
+        workspace.name_key = name_key
+        session.flush()
+        return public_workspace(workspace, actor_user_id=owner_id)
+
+
 def delete_workspace(owner_id: str, workspace_id: str) -> dict:
     target = _get_owned_workspace(owner_id, workspace_id)
     storage = resolve_storage_context(target["workspace_id"])
@@ -312,6 +344,15 @@ def leave_workspace(user_id: str, workspace_id: str, user_email: str | None = No
             raise ResourceNotFoundError("Workspace not found.")
 
         public = public_workspace(workspace, actor_user_id=user_id)
+        from src.backend.application.services.notification_service import (
+            create_workspace_member_left_notifications,
+        )
+
+        create_workspace_member_left_notifications(
+            session,
+            workspace=workspace,
+            actor_user_id=user_id,
+        )
         node = session.scalar(
             select(HierarchyNode).where(
                 HierarchyNode.workspace_id == normalized_id,
