@@ -168,9 +168,7 @@ export function WorkspaceSourcesPanel({
       >
         <PanelCollapseIcon collapsed={collapsed} />
       </button>
-      <div
-        className={`workspace-sources-panel-body${hasConnectorHolders ? " has-wide-connectors" : ""}`}
-      >
+      <div className="workspace-sources-panel-body">
         <div
           className="workspace-sources-panel-rail"
           aria-label="Connected connectors"
@@ -198,76 +196,76 @@ export function WorkspaceSourcesPanel({
         </div>
         <div
           id="workspace-sources-panel-content"
-          className={`workspace-sources-panel-shell${connectorsEmpty ? " connectors-empty" : ""}${hasConnectorHolders ? " has-connectors" : ""}`}
+          className={`workspace-sources-panel-shell${connectorsEmpty ? " connectors-empty" : ""}`}
           aria-hidden={collapsed}
         >
-        <header className="workspace-sources-header">
-          <div className="workspace-sources-header-copy">
-            <h2 id="workspace-sources-heading">Sources</h2>
-            <p>Connect and manage accounts.</p>
-          </div>
-        </header>
-        <div className="workspace-sources-search-row">
-          <label className="workspace-sources-search-field">
-            <span className="workspace-sources-search-icon" aria-hidden="true">
-              <SearchIcon />
-            </span>
-            <input
-              type="search"
-              className="workspace-sources-search-input"
-              value={searchQuery}
-              placeholder="Search connectors"
-              aria-label="Search connectors"
-              onChange={(event) => setSearchQuery(event.target.value)}
-            />
-            {searchQuery ? (
-              <button
-                type="button"
-                className="workspace-sources-search-clear"
-                aria-label="Clear search"
-                onClick={() => setSearchQuery("")}
-              >
-                <ClearIcon />
-              </button>
-            ) : null}
-          </label>
-        </div>
-        <div className="workspace-sources-body">
-          {loading ? (
-            <p className="workspace-sources-empty">Loading sources...</p>
-          ) : error ? (
-            <p className="workspace-sources-empty">{error}</p>
-          ) : holders.length === 0 ? (
-            <p className="workspace-sources-empty">
-              {searchQuery.trim()
-                ? "No connectors match your search."
-                : "No connectors connected yet. Search above to connect Slack, Jira, Notion, and more."}
-            </p>
-          ) : (
-            holders.map((holder) => (
-              <ConnectorSourcesHolderCard
-                key={holder.connector.id}
-                holder={holder}
-                expanded={Boolean(expandedHolders[holder.connector.id])}
-                onToggle={() => toggleHolder(holder.connector.id)}
-                onConnect={() => onConnect(holder.connector.id)}
-                onManage={(event) => onManage(holder.connector.id, event)}
+          <header className="workspace-sources-header">
+            <div className="workspace-sources-header-copy">
+              <h2 id="workspace-sources-heading">Sources</h2>
+              <p>Connect and manage accounts.</p>
+            </div>
+          </header>
+          <div className="workspace-sources-search-row">
+            <label className="workspace-sources-search-field">
+              <span className="workspace-sources-search-icon" aria-hidden="true">
+                <SearchIcon />
+              </span>
+              <input
+                type="search"
+                className="workspace-sources-search-input"
+                value={searchQuery}
+                placeholder="Search connectors"
+                aria-label="Search connectors"
+                onChange={(event) => setSearchQuery(event.target.value)}
               />
-            ))
-          )}
+              {searchQuery ? (
+                <button
+                  type="button"
+                  className="workspace-sources-search-clear"
+                  aria-label="Clear search"
+                  onClick={() => setSearchQuery("")}
+                >
+                  <ClearIcon />
+                </button>
+              ) : null}
+            </label>
+          </div>
+          <div className="workspace-sources-body">
+            {loading ? (
+              <p className="workspace-sources-empty">Loading sources...</p>
+            ) : error ? (
+              <p className="workspace-sources-empty">{error}</p>
+            ) : holders.length === 0 ? (
+              <p className="workspace-sources-empty">
+                {searchQuery.trim()
+                  ? "No connectors match your search."
+                  : "No connectors connected yet. Search above to connect Slack, Jira, Notion, and more."}
+              </p>
+            ) : (
+              holders.map((holder) => (
+                <ConnectorSourcesHolderCard
+                  key={holder.connector.id}
+                  holder={holder}
+                  expanded={Boolean(expandedHolders[holder.connector.id])}
+                  onToggle={() => toggleHolder(holder.connector.id)}
+                  onConnect={() => onConnect(holder.connector.id)}
+                  onManage={(event) => onManage(holder.connector.id, event)}
+                />
+              ))
+            )}
+          </div>
+          <WorkspaceAdditionalDocumentsSection
+            documents={additionalDocuments.documents}
+            loading={additionalDocuments.loading}
+            uploading={additionalDocuments.uploading}
+            mutating={additionalDocuments.mutating}
+            error={additionalDocuments.error}
+            acceptedDocumentTypes={additionalDocuments.acceptedDocumentTypes}
+            managedDocumentId={additionalDocuments.managedDocumentId}
+            onFileChange={additionalDocuments.onFileChange}
+            onManageDocument={onManageDocument}
+          />
         </div>
-        <WorkspaceAdditionalDocumentsSection
-          documents={additionalDocuments.documents}
-          loading={additionalDocuments.loading}
-          uploading={additionalDocuments.uploading}
-          mutating={additionalDocuments.mutating}
-          error={additionalDocuments.error}
-          acceptedDocumentTypes={additionalDocuments.acceptedDocumentTypes}
-          managedDocumentId={additionalDocuments.managedDocumentId}
-          onFileChange={additionalDocuments.onFileChange}
-          onManageDocument={onManageDocument}
-        />
-      </div>
       </div>
     </aside>
   );
