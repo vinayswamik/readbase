@@ -110,10 +110,6 @@ export function useWorkspaceRepos({
     void loadRepos();
   }, [loadRepos]);
 
-  function handleRepoSelect(repo: IndexedRepo) {
-    setRepoId(repo.repo_id);
-  }
-
   return {
     repoId,
     setRepoId,
@@ -121,7 +117,6 @@ export function useWorkspaceRepos({
     repoListError,
     selectedRepo,
     loadRepos,
-    handleRepoSelect,
   };
 }
 

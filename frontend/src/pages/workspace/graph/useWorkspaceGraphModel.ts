@@ -202,8 +202,6 @@ export function computeEdgeSegments(
     .filter((segment): segment is EdgeSegment => Boolean(segment));
 }
 
-
-
 type UseWorkspaceGraphModelArgs = {
   workspace: Workspace;
   user: AuthUser;
@@ -267,13 +265,6 @@ export function useWorkspaceGraphModel({
   const ownNode = useMemo(
     () => nodes.find((node) => node.assigned_user_id === user.id) ?? null,
     [nodes, user.id],
-  );
-  const availableAssignees = useMemo(
-    () =>
-      assignableUsers.filter(
-        (assignableUser) => !assignedUserIds.has(assignableUser.user_id),
-      ),
-    [assignableUsers, assignedUserIds],
   );
   const reassignOptions = useMemo(() => {
     const options = new Map<string, HierarchyAssignableUser>();
@@ -434,12 +425,7 @@ export function useWorkspaceGraphModel({
     return () => resizeObserver.disconnect();
   }, [graphRevision]);
 
-
-
   return {
-    workspace,
-    user,
-    handleApiError,
     nodes,
     setNodes,
     connections,
@@ -451,7 +437,6 @@ export function useWorkspaceGraphModel({
     graphRevision,
     selectedNodeId,
     setSelectedNodeId,
-    assignableUsers,
     editTitle,
     setEditTitle,
     editAssignedUserId,
@@ -465,28 +450,17 @@ export function useWorkspaceGraphModel({
     setPanState,
     createNodeInFlightRef,
     boardRef,
-    queuedGraphRefreshRef,
     selectedNode,
-    graphNodes,
-    graphNodeById,
     canManageWorkspace,
     canManageSelectedNode,
-    assignedUserIds,
     ownNode,
-    availableAssignees,
     reassignOptions,
     parentOptions,
     reparentOptions,
-    selectedNodeHasChildren,
     canDeleteSelectedNode,
     visibleNodes,
     edgeSegments,
-    loadGraph,
     queueGraphRefresh,
     centerViewport,
   };
 }
-
-export type UseWorkspaceGraphModelResult = ReturnType<
-  typeof useWorkspaceGraphModel
->;

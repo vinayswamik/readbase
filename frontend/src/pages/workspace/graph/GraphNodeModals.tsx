@@ -23,7 +23,7 @@ export function GraphModalShell({ open, title, description, onClose, children }:
 
   return (
     <div
-      className="connector-modal-backdrop graph-node-modal-backdrop"
+      className="graph-node-modal-backdrop"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
@@ -32,16 +32,16 @@ export function GraphModalShell({ open, title, description, onClose, children }:
       }}
     >
       <div
-        className="connector-modal graph-node-modal"
+        className="graph-node-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="graph-node-modal-heading"
       >
-        <header className="connector-modal-header">
-          <div className="connector-modal-title">
+        <header className="graph-node-modal-header">
+          <div className="graph-node-modal-title">
             <h2 id="graph-node-modal-heading">{title}</h2>
           </div>
-          <button type="button" className="connector-close-button" aria-label="Close" onClick={onClose}>
+          <button type="button" className="graph-node-modal-close-button" aria-label="Close" onClick={onClose}>
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path
                 d="M6 6l12 12M18 6 6 18"
@@ -53,7 +53,7 @@ export function GraphModalShell({ open, title, description, onClose, children }:
             </svg>
           </button>
         </header>
-        <div className="connector-modal-body graph-node-modal-body">
+        <div className="graph-node-modal-body">
           <p className="graph-node-modal-description">{description}</p>
           {children}
         </div>

@@ -11,13 +11,23 @@
   --panel-shadow: 0 20px 48px rgba(16, 24, 40, 0.1);
   --app-topbar-height: 68px;
   --app-topbar-padding-x: 32px;
+  --app-main-min-height: 720px;
+  --app-main-height: max(var(--app-main-min-height), calc(100dvh - var(--app-topbar-height)));
+  --app-layout-min-width: 1024px;
+  --app-dashboard-panel-min-width: 920px;
+  --app-modal-width: 440px;
+  --app-modal-min-height: 520px;
+  --app-chat-overlay-width: 440px;
+  --app-chat-overlay-height: 640px;
+  --app-graph-node-modal-height: 640px;
   --page-surface-color: #f8fafb;
   --page-dot-grid: radial-gradient(circle, rgba(16, 24, 40, 0.1) 1px, transparent 1px);
   --page-dot-grid-size: 22px;
   --workspace-sources-panel-width: 380px;
   --workspace-graph-min-width: 320px;
   --graph-workspace-min-width: calc(var(--workspace-sources-panel-width) + var(--workspace-graph-min-width));
-  --workspace-documents-panel-height: 40%;
+  --workspace-sources-connectors-min-height: 220px;
+  --workspace-documents-panel-height: max(280px, 40%);
 }
 
 * {
@@ -27,11 +37,14 @@
 html,
 body,
 #root {
-  min-height: 100vh;
+  min-height: 100dvh;
+  height: auto;
 }
 
 body {
   margin: 0;
+  overflow-x: auto;
+  overflow-y: auto;
   background: var(--bg);
   color: var(--ink);
   font-family:
@@ -44,20 +57,32 @@ button {
 }
 
 .login-page {
-  display: grid;
-  grid-template-rows: auto 1fr;
-  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  min-width: var(--app-layout-min-width);
+  height: auto;
 }
 
 .page-body-surface {
-  flex: 1;
-  min-height: 0;
+  flex: 1 1 auto;
   background-color: var(--page-surface-color);
   background-image: var(--page-dot-grid);
   background-size: var(--page-dot-grid-size) var(--page-dot-grid-size);
 }
 
+.home-page-main.page-body-surface {
+  flex: 1 0 auto;
+  flex-shrink: 0;
+  min-width: var(--app-layout-min-width);
+  min-height: var(--app-main-min-height);
+  height: var(--app-main-height);
+}
+
 .login-page .page-body-surface {
+  flex: 1 0 auto;
+  flex-shrink: 0;
+  min-height: var(--app-main-min-height);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -288,7 +313,9 @@ button {
 }
 
 .login-panel {
-  width: min(100%, 460px);
+  width: 460px;
+  min-width: 460px;
+  flex-shrink: 0;
   border: none;
   border-radius: 16px;
   background: var(--panel);
@@ -329,25 +356,29 @@ button {
 .home-page {
   display: flex;
   flex-direction: column;
-  height: 100dvh;
-  max-height: 100dvh;
-  overflow: hidden;
+  min-height: 100dvh;
+  min-width: var(--app-layout-min-width);
+  height: auto;
 }
 
 .home-page-main {
   display: flex;
-  flex: 1;
+  flex: 1 0 auto;
+  flex-shrink: 0;
   flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
+  min-width: var(--app-layout-min-width);
+  min-height: var(--app-main-min-height);
+  height: var(--app-main-height);
 }
 
 .home-content-body {
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
+  flex: 1 0 auto;
+  flex-shrink: 0;
+  min-width: var(--app-layout-min-width);
+  min-height: var(--app-main-min-height);
+  height: auto;
 }
 
 .home-topbar-actions {
@@ -467,16 +498,19 @@ button {
   }
 }
 
+/* Manage/Connect button State and Styles: */
 .home-connection-state {
   display: inline-flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  white-space: nowrap;
   align-items: center;
-  gap: 5px;
+  gap: 3px;
   border: 0;
   background: transparent;
   cursor: pointer;
   font-size: var(--home-action-size);
   font-weight: 400;
-  line-height: 1.35;
   padding: 0;
 }
 
@@ -494,26 +528,18 @@ button {
   opacity: 0.68;
 }
 
+/* Manage Arrow Styles: */
 .home-manage-arrow {
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  transform: translateY(1px);
 }
-
 .home-manage-arrow svg {
   width: 14px;
   height: 14px;
 }
-
 .home-manage-arrow path {
   fill: none;
   stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.3;
+  stroke-width: 1.0;
 }
 
 .app-toast {
@@ -553,7 +579,9 @@ button {
 
 .home-disconnect-modal {
   display: grid;
-  width: min(560px, calc(100% - 32px));
+  width: 560px;
+  min-width: 560px;
+  flex-shrink: 0;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: #fff;
@@ -647,8 +675,11 @@ button {
 .workspace-home {
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 0;
+  flex: 1 0 auto;
+  flex-shrink: 0;
+  min-height: var(--app-main-min-height);
+  min-width: var(--app-layout-min-width);
+  height: auto;
   width: 100%;
   max-width: none;
   margin: 0;
@@ -668,10 +699,10 @@ button {
 .workspace-body-panel {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  flex: 1 0 auto;
+  flex-shrink: 0;
   width: 100%;
-  min-height: 0;
-  overflow: hidden;
+  min-width: var(--app-dashboard-panel-min-width);
   border-radius: 16px;
   background: var(--panel);
   box-shadow:
@@ -683,14 +714,14 @@ button {
 .workspace-body-columns {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 2px minmax(0, 1fr);
-  flex: 1;
-  min-height: 0;
+  flex: 1 0 auto;
+  flex-shrink: 0;
+  min-width: var(--app-dashboard-panel-min-width);
 }
 
 .workspace-body-column {
   min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
+  overflow-y: visible;
   padding: 24px 28px;
 }
 
@@ -980,9 +1011,10 @@ button {
   inset: 0;
   z-index: 200;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 16px;
+  padding: 24px 16px;
+  overflow: auto;
   background: rgba(16, 24, 40, 0.42);
   overscroll-behavior: contain;
 }
@@ -990,8 +1022,10 @@ button {
 .invites-modal {
   display: flex;
   flex-direction: column;
-  width: min(440px, calc(100vw - 32px));
-  max-height: min(520px, calc(100vh - 32px));
+  flex-shrink: 0;
+  width: var(--app-modal-width);
+  min-width: var(--app-modal-width);
+  min-height: var(--app-modal-min-height);
   border: 1px solid #d0d5dd;
   border-radius: 14px;
   background: #fff;
@@ -1039,7 +1073,7 @@ button {
 
 .invites-modal-body {
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: 240px;
   padding: 14px 16px 16px;
   overflow: auto;
   display: grid;
@@ -1092,17 +1126,21 @@ button {
   position: fixed;
   inset: 0;
   z-index: 60;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: auto;
   background: rgba(16, 24, 40, 0.38);
-  padding: 18px;
+  padding: 24px 18px;
 }
 
 .modal-panel {
   display: flex;
   flex-direction: column;
-  width: min(760px, 100%);
-  max-height: min(80vh, calc(100vh - 36px));
+  flex-shrink: 0;
+  width: 760px;
+  min-width: 760px;
+  min-height: 480px;
   border: 1px solid #d0d5dd;
   border-radius: 12px;
   background: #fff;
@@ -1832,7 +1870,9 @@ button {
 .app-shell {
   display: grid;
   grid-template-columns: minmax(300px, 360px) 1fr;
-  min-height: 0;
+  min-height: var(--app-main-min-height);
+  min-width: var(--app-layout-min-width);
+  flex-shrink: 0;
 }
 
 .sidebar {
@@ -1970,6 +2010,7 @@ button {
   display: grid;
   grid-template-rows: 1fr auto;
   min-width: 0;
+  min-height: var(--app-main-min-height);
   background: var(--panel);
 }
 
@@ -2088,22 +2129,24 @@ button {
 .graph-workspace {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  flex: 1 0 auto;
   width: 100%;
-  min-height: 0;
-  min-width: 0;
+  min-height: var(--app-main-min-height);
+  height: var(--app-main-height);
+  min-width: var(--graph-workspace-min-width);
+  flex-shrink: 0;
   overflow-x: auto;
-  overflow-y: hidden;
   overscroll-behavior-x: contain;
 }
 
 .graph-workspace-layout {
   display: grid;
   grid-template-columns: minmax(64px, max-content) minmax(0, 1fr);
-  flex: 1;
+  flex: 1 0 auto;
   width: 100%;
   min-width: var(--graph-workspace-min-width);
-  min-height: 0;
+  min-height: var(--app-main-min-height);
+  height: 100%;
   overflow: visible;
 }
 
@@ -2111,14 +2154,15 @@ button {
   display: flex;
   flex-direction: column;
   min-width: var(--workspace-graph-min-width);
-  min-height: 0;
+  min-height: var(--app-main-min-height);
+  height: 100%;
 }
 
 .graph-workspace-main .graph-stage {
-  flex: 1;
+  flex: 1 0 auto;
   width: 100%;
   min-width: 0;
-  min-height: 0;
+  min-height: var(--app-main-min-height);
 }
 
 .sidebar-topline {
@@ -2374,7 +2418,7 @@ button {
   width: var(--workspace-sources-panel-width);
   min-width: 64px;
   height: 100%;
-  min-height: 0;
+  min-height: var(--app-main-min-height);
   z-index: 2;
   border-right: 1px solid var(--line);
   background: #fff;
@@ -2431,8 +2475,9 @@ button {
 
 .workspace-sources-panel-body {
   position: relative;
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
+  height: 100%;
   overflow: hidden;
 }
 
@@ -2535,10 +2580,10 @@ button {
 
 .workspace-sources-panel-shell {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) var(--workspace-documents-panel-height);
+  grid-template-rows: auto auto minmax(var(--workspace-sources-connectors-min-height), 1fr) var(--workspace-documents-panel-height);
   width: 100%;
   min-width: 0;
-  min-height: 0;
+  min-height: 100%;
   height: 100%;
   box-sizing: border-box;
   overflow: hidden;
@@ -2546,7 +2591,7 @@ button {
 }
 
 .workspace-sources-panel-shell.connectors-empty {
-  grid-template-rows: auto auto auto var(--workspace-documents-panel-height);
+  grid-template-rows: auto auto minmax(var(--workspace-sources-connectors-min-height), 1fr) var(--workspace-documents-panel-height);
 }
 
 .workspace-sources-panel-shell.connectors-empty .workspace-sources-body {
@@ -2571,7 +2616,7 @@ button {
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
-  padding: 18px 16px 12px;
+  padding: 12px 16px 8px;
   background: #fff;
 }
 
@@ -2588,22 +2633,22 @@ button {
 
 .workspace-sources-header h2 {
   margin: 0;
-  font-size: 22px;
-  font-weight: 900;
-  line-height: 1.2;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
   color: #101828;
 }
 
 .workspace-sources-header-copy p {
-  margin: 4px 0 0;
+  margin: 2px 0 0;
   color: var(--muted-subtle);
   font-size: 12px;
-  line-height: 1.4;
+  line-height: 1.3;
 }
 
 .workspace-sources-search-row {
   flex: 0 0 auto;
-  padding: 0 16px 14px;
+  padding: 0 16px 8px;
   background: #fff;
   border-bottom: 1px solid rgba(16, 24, 40, 0.06);
 }
@@ -2612,7 +2657,7 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 40px;
+  height: 40px;
   border-radius: 10px;
   background: #f2f4f7;
   padding: 0 10px 0 12px;
@@ -2861,50 +2906,6 @@ button {
   opacity: 0.6;
 }
 
-.connector-modal-actions-with-disconnect {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.connector-modal-actions-primary {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-left: auto;
-}
-
-.connector-disconnect-button {
-  border: none;
-  background: transparent;
-  color: #b91c1c;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 4px 0;
-}
-
-.connector-disconnect-button:hover:not(:disabled) {
-  color: #991b1b;
-  text-decoration: underline;
-}
-
-.connector-disconnect-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.connector-account-status {
-  color: #15803d;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.connector-disconnect-backdrop {
-  z-index: 80;
-}
-
 .workspace-sources-body {
   display: flex;
   flex-direction: column;
@@ -2987,7 +2988,7 @@ button {
   border-radius: 12px;
 }
 
-.workspace-sources-holder.expanded .workspace-sources-collapse.open > .workspace-sources-collapse-inner {
+.workspace-sources-holder.expanded .workspace-sources-collapse.open>.workspace-sources-collapse-inner {
   border-radius: 0 0 12px 12px;
 }
 
@@ -2995,18 +2996,20 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 auto;
-  width: 30px;
-  min-width: 30px;
-  min-height: 30px;
   border: 0;
   background: transparent;
   color: #344054;
   cursor: pointer;
-  padding: 4px;
   border-radius: 8px;
   text-align: left;
   line-height: 1;
+}
+
+.workspace-sources-holder-leading.workspace-sources-toggle {
+  flex: 0 1 auto;
+  width: auto;
+  height: auto;
+  padding: 4px 6px;
 }
 
 .workspace-sources-toggle:disabled {
@@ -3015,6 +3018,11 @@ button {
 
 .workspace-sources-toggle:hover:not(:disabled) {
   background: #f2f4f7;
+}
+
+.workspace-sources-holder-leading.workspace-sources-toggle:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .workspace-sources-identity {
@@ -3074,64 +3082,6 @@ button {
   line-height: 1;
   padding: 3px 6px;
   white-space: nowrap;
-}
-
-.workspace-sources-status-dot {
-  position: relative;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  cursor: default;
-}
-
-.workspace-sources-status-dot::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 6px);
-  transform: translateX(-50%) translateY(2px);
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: #667085;
-  font-size: 11px;
-  font-weight: 400;
-  line-height: 1.2;
-  white-space: nowrap;
-  pointer-events: none;
-  opacity: 0;
-  visibility: hidden;
-  transition:
-    opacity 140ms ease,
-    transform 140ms ease,
-    visibility 140ms ease;
-  z-index: 3;
-  box-shadow: none;
-}
-
-.workspace-sources-status-dot:hover::after,
-.workspace-sources-status-dot:focus-visible::after {
-  opacity: 1;
-  visibility: visible;
-  transform: translateX(-50%) translateY(0);
-}
-
-.workspace-sources-status-dot:focus-visible {
-  outline: 0;
-  box-shadow: 0 0 0 3px var(--focus-ring);
-  border-radius: 50%;
-}
-
-.workspace-sources-status-dot.connected {
-  background: #12b76a;
-  box-shadow: 0 0 0 1.5px rgba(18, 183, 106, 0.18);
-}
-
-.workspace-sources-status-dot.disconnected {
-  background: #f04438;
-  box-shadow: 0 0 0 1.5px rgba(240, 68, 56, 0.14);
 }
 
 .workspace-sources-manage {
@@ -3288,808 +3238,6 @@ button {
   font-weight: 600;
   text-align: right;
   white-space: nowrap;
-}
-
-.connector-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  display: grid;
-  place-items: center;
-  background: rgba(16, 24, 40, 0.38);
-  padding: 18px;
-}
-
-.connector-modal-backdrop.connector-modal-backdrop-docked {
-  position: fixed;
-  z-index: 24;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  width: min(560px, calc(100vw - 24px));
-  background: transparent;
-  padding: 0;
-  pointer-events: none;
-}
-
-.connector-modal-backdrop.document-manage-modal-backdrop {
-  z-index: 32;
-}
-
-.connector-modal-backdrop-docked .connector-modal.document-manage-modal {
-  height: 100%;
-  max-height: 100%;
-  min-height: 0;
-}
-
-.connector-modal-backdrop-docked .document-manage-modal .connector-modal-body.document-manage-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  overflow: hidden;
-}
-
-.document-manage-form .document-access-picker {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.document-manage-form .document-access-options {
-  flex: 1 1 auto;
-  min-height: 0;
-  max-height: none;
-  overflow-y: auto;
-}
-
-.document-manage-actions {
-  flex: 0 0 auto;
-  margin-top: auto;
-}
-
-.connector-modal-backdrop-docked.connector-modal-dock-open {
-  transition:
-    top 220ms cubic-bezier(0.4, 0, 0.2, 1),
-    height 220ms cubic-bezier(0.4, 0, 0.2, 1),
-    max-height 220ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.connector-modal-backdrop-docked .connector-modal {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: auto;
-  max-height: inherit;
-  min-height: 0;
-  pointer-events: auto;
-  opacity: 0;
-  transform: translateX(-10px);
-  transition:
-    opacity 220ms cubic-bezier(0.4, 0, 0.2, 1),
-    transform 220ms cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow:
-    0 20px 48px rgba(16, 24, 40, 0.16),
-    0 8px 20px rgba(16, 24, 40, 0.08);
-}
-
-.connector-modal-backdrop-docked.connector-modal-dock-open .connector-modal {
-  opacity: 1;
-  transform: translateX(0);
-}
-
-.connector-modal-backdrop-docked.connector-modal-dock-closing .connector-modal,
-.connector-modal-backdrop-docked.connector-modal-dock-entering .connector-modal {
-  opacity: 0;
-  transform: translateX(-10px);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .connector-modal-backdrop-docked .connector-modal {
-    transition: none;
-    transform: none;
-  }
-
-  .connector-modal-backdrop-docked.connector-modal-dock-open .connector-modal {
-    opacity: 1;
-  }
-
-  .connector-modal-backdrop-docked.connector-modal-dock-open {
-    transition: none;
-  }
-}
-
-.connector-modal-backdrop-docked .connector-modal>.connector-modal-body,
-.connector-modal-backdrop-docked .connector-modal>form.connector-modal-body {
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-.connector-modal {
-  display: flex;
-  flex-direction: column;
-  width: min(560px, 100%);
-  height: min(520px, calc(100vh - 72px));
-  max-height: min(520px, calc(100vh - 72px));
-  border: 1px solid #d0d5dd;
-  border-radius: 12px;
-  background: #fff;
-  box-shadow:
-    0 28px 80px rgba(16, 24, 40, 0.28),
-    0 8px 24px rgba(21, 94, 239, 0.08);
-  overflow: hidden;
-}
-
-.connector-modal-header {
-  position: relative;
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  border-bottom: 1px solid var(--line);
-  background: linear-gradient(180deg, #fbfdff 0%, #f2f6fc 100%);
-  padding: 16px;
-}
-
-.connector-modal-header-left {
-  position: absolute;
-  left: 16px;
-  top: 50%;
-  transform: translateY(-50%);
-}
-
-.connector-modal-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  justify-content: center;
-  padding: 0 96px;
-}
-
-.connector-modal-title h2 {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 900;
-  line-height: 1.2;
-  color: #101828;
-}
-
-.connector-close-button {
-  position: absolute;
-  right: 14px;
-  top: 14px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: #667085;
-  cursor: pointer;
-  padding: 0;
-}
-
-.connector-close-button svg {
-  display: block;
-  width: 18px;
-  height: 18px;
-}
-
-.connector-close-button:hover:not(:disabled) {
-  color: #344054;
-  background: #f2f4f7;
-}
-
-.connector-close-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.modal-cancel-button {
-  border: 0;
-  background: transparent;
-  color: #667085;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.4;
-  padding: 8px 12px;
-  border-radius: 6px;
-}
-
-.modal-cancel-button:hover:not(:disabled) {
-  color: #344054;
-  background: #f2f4f7;
-}
-
-.modal-cancel-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.connector-modal>form.connector-modal-body,
-.connector-modal>.connector-modal-body {
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-.connector-modal-body {
-  display: grid;
-  gap: 12px;
-  align-content: start;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-  padding: 16px;
-}
-
-.connector-modal-body label,
-.connector-access-list legend {
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.connector-modal-body>input {
-  width: 100%;
-  min-height: 42px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fff;
-  color: var(--ink);
-  outline: none;
-  padding: 0 12px;
-}
-
-.connector-account-row,
-.connector-search-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-}
-
-.connector-account-row strong,
-.connector-account-row span {
-  display: block;
-}
-
-.connector-account-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-  min-width: 0;
-}
-
-.connector-account-actions .primary-button,
-.connector-account-actions .secondary-action-button {
-  min-height: 38px;
-  padding: 0 12px;
-  white-space: nowrap;
-}
-
-.connector-account-row span {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-  margin-top: 3px;
-}
-
-.connector-search-row select,
-.connector-search-row input {
-  width: 100%;
-  min-height: 38px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fff;
-  color: var(--ink);
-  outline: none;
-  padding: 0 10px;
-}
-
-.connector-access-list {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-  border: 1px solid #d8dee8;
-  border-radius: 8px;
-  background: linear-gradient(180deg, #fbfdff 0%, #f7f9fc 100%);
-  margin: 0;
-  padding: 12px;
-  box-shadow:
-    0 10px 24px rgba(16, 24, 40, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.8);
-}
-
-.connector-access-list h3 {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 900;
-  text-transform: uppercase;
-}
-
-.connector-section-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-}
-
-.connector-section-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 6px;
-  min-width: 0;
-  min-height: 34px;
-  border: 0;
-  background: transparent;
-  color: #344054;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 600;
-  padding: 0;
-  text-align: left;
-  text-transform: uppercase;
-}
-
-.connector-section-toggle span:first-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.connector-section-chevron {
-  color: #155eef;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  transition: transform 140ms ease;
-}
-
-.connector-section-chevron.open {
-  transform: rotate(180deg);
-}
-
-.connector-section-chevron svg {
-  width: 16px;
-  height: 16px;
-  display: block;
-}
-
-.connector-section-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.connector-section-search-wrap {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  min-width: 0;
-}
-
-.connector-section-inline-status {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.3;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.connector-section-search {
-  width: min(360px, 100%);
-  min-height: 38px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background: #fff;
-  color: var(--ink);
-  outline: none;
-  padding: 0 10px;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
-}
-
-.connector-section-search:focus {
-  border-color: #155eef;
-  box-shadow:
-    0 0 0 4px rgba(21, 94, 239, 0.12),
-    0 1px 2px rgba(16, 24, 40, 0.05);
-}
-
-.connector-section-scroll {
-  display: block;
-  min-height: 0;
-  max-height: 168px;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.connector-section-scroll:has(.connector-access-row) {
-  gap: 0;
-  border: 1px solid #e8ecf0;
-  border-radius: 8px;
-  background: #fff;
-  overflow-x: hidden;
-  overflow-y: auto;
-}
-
-.connector-section-scroll .connector-access-row {
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  border-bottom: 1px solid #eef1f5;
-  padding: 9px 12px;
-}
-
-.connector-section-scroll .connector-access-row:last-child {
-  border-bottom: none;
-}
-
-.connector-section-scroll .connector-result-divider {
-  margin: 0;
-  background: #eef1f5;
-}
-
-.slack-section-scroll {
-  width: 100%;
-  border: 1px solid #e8ecf0;
-  border-radius: 8px;
-  background: #fff;
-  overflow: hidden;
-}
-
-.slack-section-scroll .connector-access-row {
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  border-bottom: 1px solid #eef1f5;
-  padding: 9px 12px;
-}
-
-.slack-section-scroll .connector-access-row:last-child {
-  border-bottom: none;
-}
-
-.slack-section-scroll .connector-result-divider {
-  margin: 0;
-  background: #eef1f5;
-}
-
-.jira-project-list-scroll {
-  min-height: 0;
-  max-height: 220px;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  border: 1px solid #e8ecf0;
-  border-radius: 8px;
-  background: #fff;
-}
-
-.jira-project-list-scroll .connector-access-row {
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  border-bottom: 1px solid #eef1f5;
-  padding: 9px 12px;
-}
-
-.jira-project-list-scroll .connector-access-row:last-child {
-  border-bottom: none;
-}
-
-.connector-section-collapse {
-  display: grid;
-  grid-template-rows: 0fr;
-  opacity: 0;
-  transition:
-    grid-template-rows 200ms ease,
-    opacity 180ms ease;
-}
-
-.connector-section-collapse>* {
-  min-height: 0;
-  overflow: hidden;
-}
-
-.connector-section-collapse.open {
-  grid-template-rows: 1fr;
-  opacity: 1;
-}
-
-.connector-result-divider {
-  height: 1px;
-  background: #e4e7ec;
-  margin: 2px 0;
-}
-
-.connector-access-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
-  align-items: center;
-  gap: 9px;
-  min-height: 36px;
-  border: 1px solid #e4e7ec;
-  border-radius: 8px;
-  background: #fff;
-  padding: 7px 9px;
-  box-shadow: 0 2px 5px rgba(16, 24, 40, 0.04);
-}
-
-.connector-access-row.slack-workspace-row {
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.connector-access-row.slack-channel-row {
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) auto;
-  align-items: center;
-}
-
-.connector-modal-body.slack-connector-body {
-  display: grid;
-  gap: 14px;
-  align-content: start;
-  overflow: hidden;
-  scrollbar-gutter: auto;
-}
-
-.connector-modal-backdrop-docked .connector-modal-body.slack-connector-body {
-  overflow-x: hidden;
-  overflow-y: auto;
-}
-
-.slack-connector-body>.connector-modal-alert {
-  flex: 0 0 auto;
-}
-
-.connector-modal-alert {
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.45;
-  padding: 10px 12px;
-}
-
-.connector-modal-alert.success {
-  border: 1px solid #abefc6;
-  background: #ecfdf3;
-  color: #067647;
-}
-
-.connector-modal-alert.error {
-  border: 1px solid #fecdca;
-  background: #fef3f2;
-  color: #b42318;
-}
-
-.slack-section-heading {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.slack-section-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  height: 20px;
-  border-radius: 999px;
-  background: #eef2f6;
-  color: #475467;
-  font-size: 11px;
-  font-weight: 800;
-  padding: 0 6px;
-  text-transform: none;
-}
-
-.slack-row-main {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.slack-channel-name {
-  min-width: 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  overflow-wrap: anywhere;
-}
-
-.slack-channel-workspace {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.slack-empty-state {
-  display: grid;
-  gap: 6px;
-  border: 1px dashed #d0d5dd;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.72);
-  padding: 18px 14px;
-  text-align: center;
-}
-
-.slack-empty-title {
-  margin: 0;
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.slack-empty-copy {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.45;
-}
-
-.slack-search-label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-.slack-channel-search-wrap {
-  flex: 0 1 auto;
-  min-width: 0;
-}
-
-.slack-channel-search {
-  width: min(200px, 100%);
-  min-height: 30px;
-  font-size: 12px;
-  padding: 0 8px;
-}
-
-.slack-channel-list:empty {
-  display: none;
-}
-
-.slack-workspaces-panel,
-.slack-channels-panel {
-  display: grid;
-  grid-template-rows: auto minmax(0, auto);
-  gap: 10px;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.slack-workspace-list,
-.slack-channel-list {
-  min-width: 0;
-  max-height: 180px;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.slack-workspace-list::-webkit-scrollbar,
-.slack-channel-list::-webkit-scrollbar {
-  display: none;
-}
-
-.compact-button {
-  min-height: 30px;
-  padding: 0 10px;
-  font-size: 12px;
-}
-
-.connector-access-row input {
-  width: 16px;
-  height: 16px;
-}
-
-.connector-access-row span {
-  min-width: 0;
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 400;
-  overflow-wrap: anywhere;
-}
-
-.connector-access-row .slack-row-title {
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.25;
-  letter-spacing: -0.01em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.connector-access-row .slack-row-url {
-  color: #98a2b3;
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.25;
-  letter-spacing: 0.01em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.connector-access-row .slack-channel-name {
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.25;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.connector-access-row .slack-channel-workspace {
-  color: #98a2b3;
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.25;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.connector-access-row strong {
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 400;
-  text-transform: none;
-}
-
-.connector-access-row .compact-button {
-  font-size: 13px;
-  font-weight: 400;
-}
-
-.connector-access-row.slack-workspace-row .compact-button,
-.connector-access-row.slack-channel-row .compact-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 76px;
-  box-sizing: border-box;
-}
-
-.connector-modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding-top: 2px;
-}
-
-.connector-modal-actions .primary-button {
-  min-width: 104px;
-  padding: 0 14px;
-}
-
-.connector-modal-actions .modal-cancel-button {
-  min-width: 0;
-  padding: 8px 12px;
 }
 
 .graph-stage {
@@ -4323,63 +3471,6 @@ button {
   overflow: hidden;
   cursor: grab;
   user-select: none;
-  container-type: inline-size;
-  container-name: graph-board;
-}
-
-@container graph-board (max-width: 360px) {
-  .graph-toolbar-cluster {
-    gap: 6px;
-  }
-
-  .graph-toolbar {
-    gap: 3px;
-    padding: 3px;
-  }
-
-  .graph-toolbar-circle {
-    width: 34px;
-    height: 34px;
-    padding: 0;
-  }
-
-  .graph-toolbar-add-node {
-    width: 28px;
-    min-width: 28px;
-    height: 28px;
-  }
-
-  .graph-toolbar.graph-toolbar-circle button.graph-toolbar-add-node {
-    width: 100%;
-    height: 100%;
-    min-width: 0;
-  }
-
-  .graph-toolbar-add-node-icon,
-  .graph-toolbar-add-node-icon svg {
-    width: 30px;
-    height: 28px;
-  }
-
-  .graph-toolbar-view button {
-    width: 28px;
-    min-width: 28px;
-    height: 28px;
-    font-size: 16px;
-  }
-
-  .graph-toolbar-view .graph-toolbar-reset svg {
-    width: 15px;
-    height: 15px;
-  }
-}
-
-@container graph-board (max-width: 280px) {
-  .graph-toolbar-add-node {
-    width: 28px;
-    min-width: 28px;
-    height: 28px;
-  }
 }
 
 .graph-board:active {
@@ -4575,12 +3666,97 @@ button {
 }
 
 .graph-node-modal-backdrop {
+  position: fixed;
+  inset: 0;
   z-index: 45;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: auto;
+  background: rgba(16, 24, 40, 0.38);
+  padding: 36px 18px;
 }
 
 .graph-node-modal {
-  height: min(640px, calc(100vh - 72px));
-  max-height: min(640px, calc(100vh - 72px));
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 560px;
+  min-width: 560px;
+  height: var(--app-graph-node-modal-height);
+  min-height: var(--app-graph-node-modal-height);
+  background: #fff;
+  border: 1px solid #d0d5dd;
+  border-radius: 12px;
+  box-shadow: 0 28px 80px rgba(16, 24, 40, 0.28);
+  overflow: hidden;
+}
+
+.graph-node-modal-header {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, #fbfdff 0%, #f2f6fc 100%);
+  padding: 16px;
+}
+
+.graph-node-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  justify-content: center;
+  padding: 0 96px;
+}
+
+.graph-node-modal-title h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1.2;
+  color: #101828;
+}
+
+.graph-node-modal-close-button {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #667085;
+  cursor: pointer;
+  padding: 0;
+}
+
+.graph-node-modal-close-button svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+
+.graph-node-modal-close-button:hover:not(:disabled) {
+  color: #344054;
+  background: #f2f4f7;
+}
+
+.graph-node-modal-close-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.graph-node-modal > .graph-node-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .graph-node-modal-body {
@@ -4612,166 +3788,6 @@ button {
   font-weight: 900;
 }
 
-.document-manage-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 14px;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #f8fafc;
-}
-
-.document-manage-meta strong {
-  color: #101828;
-  font-size: 14px;
-  line-height: 1.35;
-  word-break: break-word;
-}
-
-.document-manage-meta span {
-  color: #667085;
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.document-manage-access-hint {
-  margin: 0 0 10px;
-}
-
-.document-manage-modal-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: #f2f4f7;
-  color: #344054;
-}
-
-.document-manage-modal-icon svg {
-  display: block;
-  width: 16px;
-  height: 16px;
-}
-
-.document-access-picker {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.document-access-picker input[type="search"] {
-  width: 100%;
-  min-height: 38px;
-  padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fff;
-  color: #101828;
-  font-size: 13px;
-}
-
-.document-access-empty,
-.document-access-options-empty {
-  margin: 0;
-  color: #667085;
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.document-access-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.document-access-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid #d0d5dd;
-  border-radius: 999px;
-  background: #fff;
-  color: #344054;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.document-access-chip:hover:not(:disabled) {
-  background: #f2f4f7;
-  border-color: #98a2b3;
-}
-
-.document-access-options {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  overflow-y: auto;
-}
-
-.document-access-options button {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 42px;
-  padding: 8px 10px;
-  border: 1px solid #e4e7ec;
-  border-radius: 10px;
-  background: #fff;
-  color: #344054;
-  text-align: left;
-  cursor: pointer;
-}
-
-.document-access-options button.active {
-  border-color: #84adff;
-  background: #f5f8ff;
-}
-
-.document-access-check {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  border: 1px solid #d0d5dd;
-  border-radius: 4px;
-  color: #155eef;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.document-access-options button.active .document-access-check {
-  border-color: #155eef;
-  background: #eff4ff;
-}
-
-.document-access-option-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.document-access-option-copy strong {
-  color: #101828;
-  font-size: 13px;
-  line-height: 1.3;
-}
-
-.document-access-option-copy span {
-  color: #667085;
-  font-size: 12px;
-  line-height: 1.3;
-}
 .graph-control-form {
   display: grid;
   gap: 10px;
@@ -4987,9 +4003,12 @@ button {
   bottom: 22px;
   z-index: 12;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  width: min(440px, calc(100% - 44px));
-  height: min(640px, calc(100% - 44px));
+  grid-template-rows: auto minmax(180px, 1fr) auto;
+  width: var(--app-chat-overlay-width);
+  min-width: var(--app-chat-overlay-width);
+  height: var(--app-chat-overlay-height);
+  min-height: var(--app-chat-overlay-height);
+  flex-shrink: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
@@ -5050,18 +4069,12 @@ button {
   }
 
   .login-panel {
-    width: min(calc(100% - 40px), 460px);
     border-radius: 14px;
     padding: 24px;
   }
 
   .home-connector-marquee {
     padding: 14px 20px;
-  }
-
-  .home-disconnect-actions {
-    display: grid;
-    grid-template-columns: 1fr;
   }
 
   .workspace-home {
@@ -5072,102 +4085,11 @@ button {
     border-radius: 14px;
   }
 
-  .workspace-body-columns {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1px auto;
-  }
-
-  .workspace-body-divider {
-    width: auto;
-    height: 2px;
-    margin: 0 20px;
-  }
-
   .workspace-body-column {
     padding: 20px;
   }
 
   .workspace-body-panel .app-toast {
     margin: 0 20px 16px;
-  }
-
-  .workspace-create-row,
-  .workspace-item,
-  .member-add-form {
-    grid-template-columns: 1fr;
-  }
-
-  .workspace-actions {
-    min-width: 0;
-  }
-
-  .app-shell {
-    grid-template-columns: 1fr;
-  }
-
-  .sidebar {
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
-  }
-
-  .messages {
-    min-height: 52vh;
-    padding: 18px;
-  }
-
-  .ask-form {
-    grid-template-columns: 1fr;
-  }
-
-  .connection-row,
-  .connector-account-row,
-  .connector-search-row,
-  .connector-section-row,
-  .connector-access-row.slack-workspace-row,
-  .connector-access-row.slack-channel-row,
-  .overlay-ask-form {
-    grid-template-columns: 1fr;
-  }
-
-  .connector-access-row.slack-channel-row {
-    gap: 6px;
-  }
-
-  .connector-access-row.slack-workspace-row .compact-button,
-  .connector-access-row.slack-channel-row .compact-button {
-    justify-self: start;
-  }
-
-  .connector-section-search-wrap {
-    width: 100%;
-    flex-wrap: wrap;
-    justify-content: flex-start;
-  }
-
-  .connector-section-search {
-    width: 100%;
-    flex: 1 1 100%;
-  }
-
-  .connector-modal-actions {
-    display: grid;
-    grid-template-columns: 1fr;
-  }
-
-  .connector-modal-actions .primary-button,
-  .connector-modal-actions .secondary-action-button {
-    width: 100%;
-  }
-
-  .chat-overlay {
-    right: 12px;
-    bottom: 12px;
-    width: calc(100% - 24px);
-    height: min(620px, calc(100% - 24px));
-  }
-
-  .floating-ask-button {
-    right: 14px;
-    bottom: 14px;
   }
 }

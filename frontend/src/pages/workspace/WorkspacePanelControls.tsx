@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 
-import type { HierarchyNode, IndexedRepo } from "../../types";
+import type { HierarchyNode } from "../../types";
 import type { CreateNodeDraft } from "./graph/types";
 
 const MAX_PICKER_RESULTS = 20;
@@ -15,44 +15,6 @@ export function buildInviteJoinUrl(joinPath: string | null | undefined, joinToke
     return path;
   }
   return `${window.location.origin}${path.startsWith("/") ? path : `/${path}`}`;
-}
-
-export function RepoList({
-  repos,
-  selectedRepoId,
-  error,
-  onSelect,
-}: {
-  repos: IndexedRepo[];
-  selectedRepoId: string | null;
-  error: string | null;
-  onSelect: (repo: IndexedRepo) => void;
-}) {
-  if (error) {
-    return <div className="status-text">{error}</div>;
-  }
-
-  if (!repos.length) {
-    return <div className="status-text">No indexed repositories yet.</div>;
-  }
-
-  return (
-    <div className="repo-list">
-      {repos.map((repo) => (
-        <button
-          key={repo.repo_id}
-          type="button"
-          className={`repo-item${repo.repo_id === selectedRepoId ? " active" : ""}`}
-          onClick={() => onSelect(repo)}
-        >
-          <span className="repo-url">{repo.repo_url}</span>
-          <span className="repo-meta">
-            {repo.file_count} files, {repo.chunk_count} chunks
-          </span>
-        </button>
-      ))}
-    </div>
-  );
 }
 
 export function CreateNodeForm({

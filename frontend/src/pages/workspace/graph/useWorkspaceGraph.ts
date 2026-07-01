@@ -14,14 +14,12 @@ type UseWorkspaceGraphArgs = {
 };
 
 export function useWorkspaceGraph(args: UseWorkspaceGraphArgs) {
+  const { workspace, user, handleApiError } = args;
   const [addNodeModalOpen, setAddNodeModalOpen] = useState(false);
   const [editNodeModalOpen, setEditNodeModalOpen] = useState(false);
   const [nodeEditAnchor, setNodeEditAnchor] = useState<NodeEditAnchor | null>(null);
   const model = useWorkspaceGraphModel(args);
   const {
-    workspace,
-    user,
-    handleApiError,
     nodes,
     setNodes,
     connections,
@@ -310,7 +308,6 @@ export function useWorkspaceGraph(args: UseWorkspaceGraphArgs) {
     graphRevision: model.graphRevision,
     selectedNodeId,
     selectedNode,
-    availableAssignees: model.availableAssignees,
     parentOptions: model.parentOptions,
     ownNode: model.ownNode,
     canManageWorkspace,

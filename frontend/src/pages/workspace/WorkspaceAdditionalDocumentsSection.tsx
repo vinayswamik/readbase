@@ -1,4 +1,4 @@
-import { useRef, type ChangeEvent, type MouseEvent } from "react";
+import { useRef, type ChangeEvent } from "react";
 
 import type { WorkspaceAdditionalDocument } from "./workspaceAdditionalDocuments";
 
@@ -6,27 +6,21 @@ export function WorkspaceAdditionalDocumentsSection({
   documents,
   loading,
   uploading,
-  mutating,
   error,
   acceptedDocumentTypes,
-  managedDocumentId,
   onFileChange,
-  onManageDocument,
 }: {
   documents: WorkspaceAdditionalDocument[];
   loading: boolean;
   uploading: boolean;
-  mutating: boolean;
   error: string | null;
   acceptedDocumentTypes: string;
-  managedDocumentId: string | null;
   onFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
-  onManageDocument: (document: WorkspaceAdditionalDocument, event: MouseEvent<HTMLButtonElement>) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handleAddClick() {
-    if (uploading || mutating) {
+    if (uploading) {
       return;
     }
     fileInputRef.current?.click();
@@ -43,7 +37,7 @@ export function WorkspaceAdditionalDocumentsSection({
           type="button"
           className="workspace-sources-documents-add"
           aria-label="Upload document"
-          disabled={uploading || mutating}
+          disabled={uploading}
           onClick={handleAddClick}
         >
           <PlusIcon />
@@ -63,7 +57,7 @@ export function WorkspaceAdditionalDocumentsSection({
           {error}
         </p>
       ) : null}
-      <div className="workspace-sources-documents-list" aria-busy={loading || uploading || mutating}>
+      <div className="workspace-sources-documents-list" aria-busy={loading || uploading}>
         {loading ? (
           <p className="workspace-sources-documents-empty">Loading documents...</p>
         ) : documents.length === 0 ? (
@@ -84,13 +78,11 @@ export function WorkspaceAdditionalDocumentsSection({
                       {document.name}
                     </span>
                   </div>
-                  <button
+                  <button 
                     type="button"
                     className="home-connection-state connected workspace-sources-manage"
                     aria-label={`Manage ${document.name}`}
-                    aria-pressed={managedDocumentId === document.document_id}
-                    disabled={uploading || mutating}
-                    onClick={(event) => onManageDocument(document, event)}
+                    disabled={uploading}
                   >
                     <span>Manage</span>
                     <span className="home-manage-arrow" aria-hidden="true">

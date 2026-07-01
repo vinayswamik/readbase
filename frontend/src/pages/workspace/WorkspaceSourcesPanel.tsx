@@ -22,7 +22,6 @@ export function WorkspaceSourcesPanel({
   onConnect,
   onManage,
   additionalDocuments,
-  onManageDocument,
   onSessionExpired,
 }: {
   workspace: Workspace;
@@ -30,18 +29,15 @@ export function WorkspaceSourcesPanel({
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
   onConnect: (connectorId: ConnectorId) => void;
-  onManage: (connectorId: ConnectorId, event: MouseEvent<HTMLButtonElement>) => void;
+  onManage?: (connectorId: ConnectorId, event: MouseEvent<HTMLButtonElement>) => void;
   additionalDocuments: {
     documents: WorkspaceAdditionalDocument[];
     loading: boolean;
     uploading: boolean;
-    mutating: boolean;
     error: string | null;
     acceptedDocumentTypes: string;
-    managedDocumentId: string | null;
     onFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
   };
-  onManageDocument: (document: WorkspaceAdditionalDocument, event: MouseEvent<HTMLButtonElement>) => void;
   onSessionExpired: () => void;
 }) {
   const [loading, setLoading] = useState(false);
@@ -133,7 +129,6 @@ export function WorkspaceSourcesPanel({
     [allHolders],
   );
 
-  const hasConnectorHolders = !loading && !error && holders.length > 0;
   const connectorsEmpty = !loading && !error && holders.length === 0;
 
   function handleExpandPanel() {
@@ -249,7 +244,11 @@ export function WorkspaceSourcesPanel({
                   expanded={Boolean(expandedHolders[holder.connector.id])}
                   onToggle={() => toggleHolder(holder.connector.id)}
                   onConnect={() => onConnect(holder.connector.id)}
-                  onManage={(event) => onManage(holder.connector.id, event)}
+                  onManage={
+                    onManage
+                      ? (event) => onManage(holder.connector.id, event)
+                      : undefined
+                  }
                 />
               ))
             )}
@@ -258,12 +257,9 @@ export function WorkspaceSourcesPanel({
             documents={additionalDocuments.documents}
             loading={additionalDocuments.loading}
             uploading={additionalDocuments.uploading}
-            mutating={additionalDocuments.mutating}
             error={additionalDocuments.error}
             acceptedDocumentTypes={additionalDocuments.acceptedDocumentTypes}
-            managedDocumentId={additionalDocuments.managedDocumentId}
             onFileChange={additionalDocuments.onFileChange}
-            onManageDocument={onManageDocument}
           />
         </div>
       </div>
@@ -282,12 +278,11 @@ function ConnectorSourcesHolderCard({
   expanded: boolean;
   onToggle: () => void;
   onConnect: () => void;
-  onManage: (event: MouseEvent<HTMLButtonElement>) => void;
+  onManage?: (event: MouseEvent<HTMLButtonElement>) => void;
 }) {
   const sourceCount = holder.sources.length;
   const sourceCountLabel =
     sourceCount > 0 ? `${sourceCount} source${sourceCount === 1 ? "" : "s"}` : null;
-  const connectionStatusLabel = holder.connected ? "Connected" : "Disconnected";
   const isSlack = holder.connector.id === "slack";
   const hasSources = holder.sources.length > 0;
 
@@ -296,44 +291,36 @@ function ConnectorSourcesHolderCard({
       className={`workspace-sources-holder${expanded ? " expanded" : ""}${isSlack ? " slack-sources" : ""}`}
     >
       <div className="workspace-sources-holder-header">
-        <div className="workspace-sources-holder-leading">
-          <button
-            type="button"
-            className="workspace-sources-toggle"
-            aria-expanded={expanded}
-            aria-controls={`workspace-sources-panel-${holder.connector.id}`}
-            aria-label={hasSources ? `Toggle ${holder.connector.name} sources` : undefined}
-            onClick={onToggle}
-            disabled={!hasSources}
-          >
-            <span className={`workspace-sources-chevron${expanded ? " open" : ""}`} aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path
-                  fillRule="evenodd"
-                  clipRule="evenodd"
-                  d="M12.7071 14.7071C12.3166 15.0976 11.6834 15.0976 11.2929 14.7071L6.29289 9.70711C5.90237 9.31658 5.90237 8.68342 6.29289 8.29289C6.68342 7.90237 7.31658 7.90237 7.70711 8.29289L12 12.5858L16.2929 8.29289C16.6834 7.90237 17.3166 7.90237 17.7071 8.29289C18.0976 8.68342 18.0976 9.31658 17.7071 9.70711L12.7071 14.7071Z"
-                  fill="currentColor"
-                />
-              </svg>
-            </span>
-          </button>
+        <button
+          type="button"
+          className="workspace-sources-holder-leading workspace-sources-toggle"
+          aria-expanded={expanded}
+          aria-controls={`workspace-sources-panel-${holder.connector.id}`}
+          aria-label={hasSources ? `Toggle ${holder.connector.name} sources` : undefined}
+          onClick={onToggle}
+          disabled={!hasSources}
+        >
+          <span className={`workspace-sources-chevron${expanded ? " open" : ""}`} aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                fillRule="evenodd"
+                clipRule="evenodd"
+                d="M12.7071 14.7071C12.3166 15.0976 11.6834 15.0976 11.2929 14.7071L6.29289 9.70711C5.90237 9.31658 5.90237 8.68342 6.29289 8.29289C6.68342 7.90237 7.31658 7.90237 7.70711 8.29289L12 12.5858L16.2929 8.29289C16.6834 7.90237 17.3166 7.90237 17.7071 8.29289C18.0976 8.68342 18.0976 9.31658 17.7071 9.70711L12.7071 14.7071Z"
+                fill="currentColor"
+              />
+            </svg>
+          </span>
           <ConnectorLogo connectorId={holder.connector.id} />
           <span className="workspace-sources-holder-name">{holder.connector.name}</span>
-          <span
-            className={`workspace-sources-status-dot${holder.connected ? " connected" : " disconnected"}`}
-            role="status"
-            tabIndex={0}
-            aria-label={connectionStatusLabel}
-            data-tooltip={connectionStatusLabel}
-          />
           {sourceCountLabel ? (
             <span className="workspace-sources-count">{sourceCountLabel}</span>
           ) : null}
-        </div>
+        </button>
         {holder.connected ? (
           <button
             type="button"
             className="home-connection-state connected workspace-sources-manage"
+            aria-label={`Manage ${holder.connector.name}`}
             onClick={onManage}
           >
             <span>Manage</span>
