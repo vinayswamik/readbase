@@ -78,7 +78,7 @@ export function WorkspaceAdditionalDocumentsSection({
                       {document.name}
                     </span>
                   </div>
-                  <button 
+                  <button
                     type="button"
                     className="home-connection-state connected workspace-sources-manage"
                     aria-label={`Manage ${document.name}`}

@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SyntheticEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { fetchJson, getErrorMessage, isSessionExpiredMessage, postJson } from "../../../api";
 import type {
@@ -142,7 +142,7 @@ export function useWorkspaceChat({
     messageEndRef.current?.scrollIntoView({ block: "end" });
   }, [messages, chatOpen]);
 
-  async function handleAskSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleAskSubmit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmedQuestion = question.trim();
     if (!trimmedQuestion) {

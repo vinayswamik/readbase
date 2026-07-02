@@ -1,5 +1,6 @@
 :root {
   --bg: #f3f5f8;
+  --bg-panel: #f8fafc;
   --panel: #ffffff;
   --ink: #101828;
   --muted: #475467;
@@ -9,25 +10,22 @@
   --button-hover: #004eea;
   --focus-ring: rgba(21, 94, 239, 0.18);
   --panel-shadow: 0 20px 48px rgba(16, 24, 40, 0.1);
-  --app-topbar-height: 68px;
+  --app-topbar-height: 8vh;
   --app-topbar-padding-x: 32px;
-  --app-main-min-height: 720px;
-  --app-main-height: max(var(--app-main-min-height), calc(100dvh - var(--app-topbar-height)));
+  --app-main-height: 92vh;
   --app-layout-min-width: 1024px;
   --app-dashboard-panel-min-width: 920px;
   --app-modal-width: 440px;
-  --app-modal-min-height: 520px;
-  --app-chat-overlay-width: 440px;
-  --app-chat-overlay-height: 640px;
-  --app-graph-node-modal-height: 640px;
   --page-surface-color: #f8fafb;
   --page-dot-grid: radial-gradient(circle, rgba(16, 24, 40, 0.1) 1px, transparent 1px);
   --page-dot-grid-size: 22px;
   --workspace-sources-panel-width: 380px;
   --workspace-graph-min-width: 320px;
   --graph-workspace-min-width: calc(var(--workspace-sources-panel-width) + var(--workspace-graph-min-width));
-  --workspace-sources-connectors-min-height: 220px;
-  --workspace-documents-panel-height: max(280px, 40%);
+  --app-chat-panel-bar-height: 8vh;
+  --app-graph-drawer-width: min(70vw, 960px);
+  --workspace-sources-connectors-min-height: auto;
+  --workspace-documents-panel-height: auto;
 }
 
 * {
@@ -532,10 +530,12 @@ button {
 .home-manage-arrow {
   display: inline-flex;
 }
+
 .home-manage-arrow svg {
   width: 14px;
   height: 14px;
 }
+
 .home-manage-arrow path {
   fill: none;
   stroke: currentColor;
@@ -2151,11 +2151,18 @@ button {
 }
 
 .graph-workspace-main {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: var(--workspace-graph-min-width);
   min-height: var(--app-main-min-height);
   height: 100%;
+  overflow: hidden;
+}
+
+.graph-workspace-main>.chat-panel {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .graph-workspace-main .graph-stage {
@@ -2416,12 +2423,9 @@ button {
   flex-direction: column;
   flex-shrink: 0;
   width: var(--workspace-sources-panel-width);
-  min-width: 64px;
-  height: 100%;
-  min-height: var(--app-main-min-height);
   z-index: 2;
   border-right: 1px solid var(--line);
-  background: #fff;
+  background: var(--bg-panel);
   overflow: visible;
   transition: width 280ms cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -2476,8 +2480,7 @@ button {
 .workspace-sources-panel-body {
   position: relative;
   flex: 1 1 auto;
-  min-height: 0;
-  height: 100%;
+  height: auto;
   overflow: hidden;
 }
 
@@ -2579,19 +2582,26 @@ button {
 }
 
 .workspace-sources-panel-shell {
-  display: grid;
-  grid-template-rows: auto auto minmax(var(--workspace-sources-connectors-min-height), 1fr) var(--workspace-documents-panel-height);
+  display: flex;
+  flex-direction: column;
   width: 100%;
   min-width: 0;
-  min-height: 100%;
-  height: 100%;
+  min-height: 0;
+  height: auto;
   box-sizing: border-box;
   overflow: hidden;
   --home-action-size: 13px;
 }
 
+.workspace-sources-panel-shell .workspace-sources-documents {
+  flex: 0 0 auto;
+  height: auto;
+  max-height: 40vh;
+  border-top: 1px solid var(--line);
+}
+
 .workspace-sources-panel-shell.connectors-empty {
-  grid-template-rows: auto auto minmax(var(--workspace-sources-connectors-min-height), 1fr) var(--workspace-documents-panel-height);
+  grid-template-rows: auto;
 }
 
 .workspace-sources-panel-shell.connectors-empty .workspace-sources-body {
@@ -2603,47 +2613,37 @@ button {
 }
 
 .workspace-sources-panel-shell.connectors-empty .workspace-sources-documents {
-  min-height: 0;
+  height: auto;
 }
 
 .workspace-sources-panel-shell.connectors-empty .workspace-sources-documents-list {
   overflow: visible;
+  height: auto;
 }
 
 .workspace-sources-header {
   flex: 0 0 auto;
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
   padding: 12px 16px 8px;
   background: #fff;
 }
 
 .workspace-sources-panel .workspace-sources-header h2 {
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-.workspace-sources-header-copy {
-  min-width: 0;
-  flex: 1;
-}
-
-.workspace-sources-header h2 {
   margin: 0;
   font-size: 18px;
   font-weight: 700;
-  line-height: 1.3;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
   color: #101828;
 }
 
 .workspace-sources-header-copy p {
-  margin: 2px 0 0;
+  margin: 4px 0 0;
   color: var(--muted-subtle);
-  font-size: 12px;
-  line-height: 1.3;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
 }
 
 .workspace-sources-search-row {
@@ -2743,9 +2743,9 @@ button {
 .workspace-sources-documents {
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  flex: 0 0 auto;
+  height: auto;
   overflow: hidden;
-  background: #f8fafc;
   border-top: 1px solid rgba(16, 24, 40, 0.06);
 }
 
@@ -2761,9 +2761,10 @@ button {
 .workspace-sources-documents-header h3 {
   margin: 0;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.3;
-  color: #101828;
+  letter-spacing: 0.01em;
+  color: #344054;
 }
 
 .workspace-sources-documents-add {
@@ -2819,7 +2820,7 @@ button {
 }
 
 .workspace-sources-documents-list {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -2828,10 +2829,11 @@ button {
 }
 
 .workspace-sources-documents-empty {
-  margin: 0;
   color: var(--muted-subtle);
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 400;
   line-height: 1.45;
+  text-align: center;
 }
 
 .workspace-sources-documents-rows {
@@ -2851,7 +2853,9 @@ button {
 }
 
 .workspace-sources-document-holder .workspace-sources-holder-name {
+  font-size: 13px;
   font-weight: 500;
+  color: #475467;
 }
 
 .workspace-sources-holder-leading .workspace-sources-document-icon {
@@ -2882,6 +2886,7 @@ button {
   font-size: 12px;
   font-weight: 600;
   line-height: 1.35;
+  letter-spacing: 0.01em;
   white-space: nowrap;
   cursor: pointer;
   transition:
@@ -2910,27 +2915,27 @@ button {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  flex: 1 1 auto;
   min-height: 0;
-  overflow-x: hidden;
+  overflow-x: auto;
   overflow-y: auto;
   padding: 16px;
-  background: #f8fafc;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
+  height: auto;
 }
 
 .workspace-sources-empty {
-  margin: 0;
-  color: var(--muted);
-  font-size: 14px;
+  color: var(--muted-subtle);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
   text-align: center;
-  padding: 24px 12px;
 }
 
 .workspace-sources-holder {
   flex: 0 0 auto;
   width: 100%;
   min-width: 0;
+  height: auto;
   border: 1px solid #e4e7ec;
   border-radius: 12px;
   background: #fff;
@@ -3065,7 +3070,8 @@ button {
   max-width: 100%;
   color: #101828;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
+  line-height: 1.3;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3077,16 +3083,18 @@ button {
   border-radius: 999px;
   background: #f9fafb;
   color: #667085;
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1;
-  padding: 3px 6px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 2px 6px;
   white-space: nowrap;
 }
 
 .workspace-sources-manage {
   flex: 0 0 auto;
-  min-height: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
   white-space: nowrap;
 }
 
@@ -3190,7 +3198,7 @@ button {
   padding: 0;
   width: 100%;
   min-width: 0;
-  max-height: 220px;
+  height: auto;
   border: 1px solid #eef1f5;
   border-radius: 8px;
   background: #fff;
@@ -3271,8 +3279,8 @@ button {
 
 .graph-toolbar-cluster {
   position: absolute;
-  bottom: 16px;
-  left: 16px;
+  top: 16px;
+  right: 16px;
   z-index: 6;
   display: flex;
   align-items: center;
@@ -3436,8 +3444,8 @@ button {
   content: attr(data-tooltip);
   position: absolute;
   left: 50%;
-  bottom: calc(100% + 14px);
-  transform: translateX(-50%) translateY(4px);
+  top: calc(100% + 14px);
+  transform: translateX(-50%) translateY(-4px);
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -3754,7 +3762,7 @@ button {
   opacity: 0.5;
 }
 
-.graph-node-modal > .graph-node-modal-body {
+.graph-node-modal>.graph-node-modal-body {
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -3935,87 +3943,6 @@ button {
   padding: 0 8px;
 }
 
-.floating-ask-button {
-  position: absolute;
-  right: 22px;
-  bottom: 22px;
-  z-index: 10;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 52px;
-  height: 52px;
-  padding: 0;
-  border: 1px solid var(--ink);
-  border-radius: 999px;
-  background: var(--ink);
-  color: #fff;
-  cursor: pointer;
-  box-shadow:
-    0 4px 8px rgba(16, 24, 40, 0.12),
-    0 12px 28px rgba(16, 24, 40, 0.18);
-  transition:
-    background-color 160ms ease,
-    border-color 160ms ease,
-    box-shadow 160ms ease;
-}
-
-.floating-ask-button:hover {
-  background: #344054;
-  border-color: #344054;
-}
-
-.floating-ask-button:focus-visible {
-  outline: 0;
-  box-shadow:
-    0 4px 8px rgba(16, 24, 40, 0.12),
-    0 12px 28px rgba(16, 24, 40, 0.18),
-    0 0 0 4px var(--focus-ring);
-}
-
-.floating-ask-button-icon {
-  width: 22px;
-  height: 22px;
-}
-
-.floating-ask-button-badge {
-  position: absolute;
-  top: -2px;
-  right: -2px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border: 2px solid var(--ink);
-  border-radius: 999px;
-  background: #fff;
-  color: var(--ink);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.chat-overlay {
-  position: absolute;
-  right: 22px;
-  bottom: 22px;
-  z-index: 12;
-  display: grid;
-  grid-template-rows: auto minmax(180px, 1fr) auto;
-  width: var(--app-chat-overlay-width);
-  min-width: var(--app-chat-overlay-width);
-  height: var(--app-chat-overlay-height);
-  min-height: var(--app-chat-overlay-height);
-  flex-shrink: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 22px 52px rgba(16, 24, 40, 0.22);
-  overflow: hidden;
-}
-
 .chat-overlay-header {
   display: flex;
   align-items: flex-start;
@@ -4052,12 +3979,250 @@ button {
   font-size: 14px;
 }
 
-.overlay-ask-form {
-  grid-template-columns: 1fr auto;
-  border-top: 1px solid var(--line);
-  background: #f8fafc;
-  padding: 12px;
+/* ---- New chat column + graph drawer (layout swap) ---- */
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
+
+.chat-panel-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chat-panel-body .overlay-messages {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.chat-panel-bar {
+  flex: 0 0 auto;
+  display: flex;
+  /* align-items: stretch; */
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  background: var(--bg-panel);
+  padding: 10px 12px;
+  height: auto;
+  /* min-height: var(--app-chat-panel-bar-height); */
+}
+
+.chat-panel-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.chat-panel-bar-input {
+  display: flex;
+  /* align-items: stretch; */
+  gap: 8px;
+  flex: 1 1 auto;
+  width: auto;
+  /* min-width: 0; */
+}
+
+.chat-panel-bar-input textarea {
+  flex: 1 1 auto;
+  /* min-width: 0; */
+  /* min-height: 40px; */
+  /* max-height: 120px; */
+  resize: vertical;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 14px;
+  background: #fff;
+}
+
+/* ---- graph toggle ---- */
+.chat-panel-bar-toggle {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: black;
+  cursor: pointer;
+}
+
+.chat-panel-bar-toggle-icon {
+  display: block;
+  width: 42px;
+  height: 42px;
+  transform-origin: center;
+  transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  pointer-events: none;
+}
+
+
+/* Hover pop-up only on devices with a real hover capability (mouse/pen).
+   On touch, hover is "sticky" after a tap and would flicker against the
+   pressed state, so it is restricted to (hover: hover). */
+@media (hover: hover) {
+  .chat-panel-bar-toggle:hover .chat-panel-bar-toggle-icon,
+  .chat-panel-bar-toggle:focus-visible .chat-panel-bar-toggle-icon {
+    transform: scale(1.18);
+  }
+}
+
+.chat-panel-bar-toggle.is-pressed .chat-panel-bar-toggle-icon {
+  transform: scale(0.85);
+  transition: transform 90ms ease;
+}
+
+/* "Chart" tooltip shown on hover/focus, rendered as plain text above the button.
+   Anchored to the right edge of the button so it never overflows the chat panel. */
+.chat-panel-bar-toggle[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: -30px;
+  background: transparent;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 400;
+  pointer-events: none;
+  opacity: 0;
+  overflow: visible;
+  visibility: hidden;
+  transform: translateY(4px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease,
+    visibility 140ms ease;
+}
+
+.chat-panel-bar-toggle[data-tooltip]:hover::after,
+.chat-panel-bar-toggle[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+/* ---- Graph drawer (overlays the chat message area only) ---- */
+.chat-panel-body > .graph-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 70%;
+  z-index: 60;
+  max-width: 960px;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-left: 1px solid var(--line);
+  box-shadow: -16px 0 40px rgba(16, 24, 40, 0.18);
+  transform: translateX(100%);
+  transition:
+    transform 220ms ease,
+    visibility 0s ease 220ms;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.chat-panel-body > .graph-drawer.is-open {
+  transform: translateX(0);
+  pointer-events: auto;
+  visibility: visible;
+  transition:
+    transform 220ms ease,
+    visibility 0s ease 0s;
+}
+
+.graph-drawer.is-resizing {
+  transition: none;
+}
+
+.graph-drawer-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -6px;
+  width: 12px;
+  z-index: 25;
+  cursor: col-resize;
+  touch-action: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.graph-drawer-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 5px;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--line);
+  transition: background-color 160ms ease;
+}
+
+.graph-drawer-resize-handle:hover::after,
+.graph-drawer.is-resizing .graph-drawer-resize-handle::after {
+  background: rgba(21, 94, 239, 0.45);
+}
+
+/* Always-visible grabber grip pinned to the middle of the resize rail */
+.graph-drawer-resize-grip {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 3px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid var(--line);
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.14);
+  z-index: 1;
+}
+
+.graph-drawer-resize-grip::before,
+.graph-drawer-resize-grip::after {
+  content: "";
+  width: 12px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--muted-subtle);
+}
+
+.graph-drawer-resize-handle:hover .graph-drawer-resize-grip,
+.graph-drawer.is-resizing .graph-drawer-resize-grip {
+  border-color: rgba(21, 94, 239, 0.45);
+}
+
+.graph-drawer.is-resizing .graph-drawer-resize-grip::before,
+.graph-drawer.is-resizing .graph-drawer-resize-grip::after,
+.graph-drawer-resize-handle:hover .graph-drawer-resize-grip::before,
+.graph-drawer-resize-handle:hover .graph-drawer-resize-grip::after {
+  background: rgba(21, 94, 239, 0.85);
+}
+
+.graph-drawer .graph-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 
 @media (max-width: 820px) {
   .app-topbar {

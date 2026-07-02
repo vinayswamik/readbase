@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState, type MouseEvent } from "react";
 
 import type { AuthUser, Workspace } from "../../types";
 import { AppToast } from "../../components/AppToast";
@@ -11,6 +11,17 @@ import { useWorkspaceConnectors } from "./connectors/useWorkspaceConnectors";
 import { GraphAddNodeModal, GraphEditNodeModal } from "./graph/GraphNodeModals";
 import { useWorkspaceGraph } from "./graph/useWorkspaceGraph";
 import { useWorkspaceAdditionalDocuments } from "./useWorkspaceAdditionalDocuments";
+
+const GRAPH_DRAWER_MIN_WIDTH = 320;
+const GRAPH_DRAWER_MAX_WIDTH = 960;
+
+function getDefaultGraphDrawerWidth(containerWidth: number) {
+  return Math.min(Math.round(containerWidth * 0.7), GRAPH_DRAWER_MAX_WIDTH);
+}
+
+function clampGraphDrawerWidth(width: number, containerWidth: number) {
+  return Math.max(GRAPH_DRAWER_MIN_WIDTH, Math.min(width, getDefaultGraphDrawerWidth(containerWidth)));
+}
 
 export function WorkspaceChatPageImpl({
   user,
@@ -25,6 +36,10 @@ export function WorkspaceChatPageImpl({
 }) {
   const [sourcesRefreshKey, setSourcesRefreshKey] = useState(0);
   const [sourcesPanelOpen, setSourcesPanelOpen] = useState(true);
+  const [graphDrawerOpen, setGraphDrawerOpen] = useState(false);
+  const [graphDrawerWidth, setGraphDrawerWidth] = useState<number | null>(null);
+  const [graphDrawerResizing, setGraphDrawerResizing] = useState(false);
+  const mainRef = useRef<HTMLDivElement>(null);
   const handleApiError = useWorkspaceApiError(onSessionExpired);
   const repos = useWorkspaceRepos({ workspace, onBack, handleApiError });
   const chat = useWorkspaceChat({
@@ -54,8 +69,6 @@ export function WorkspaceChatPageImpl({
     setQuestion,
     messages,
     asking,
-    chatOpen,
-    setChatOpen,
     handleAskSubmit,
     canAsk,
     messageEndRef,
@@ -99,11 +112,49 @@ export function WorkspaceChatPageImpl({
     handleNodeClick,
     handleOpenEditNode,
     handleZoom,
-    centerViewport,
+    handleViewportReset,
   } = graph;
 
   function handleConnectConnector(connectorId: ConnectorId) {
     connectors.handleConnectConnector(connectorId);
+  }
+
+  function toggleGraph() {
+    setGraphDrawerOpen((open) => {
+      if (!open && mainRef.current) {
+        const containerWidth = mainRef.current.getBoundingClientRect().width;
+        setGraphDrawerWidth(getDefaultGraphDrawerWidth(containerWidth));
+      }
+      return !open;
+    });
+  }
+
+  function startDrawerResize(event: MouseEvent<HTMLDivElement>) {
+    event.preventDefault();
+    if (!mainRef.current) {
+      return;
+    }
+
+    setGraphDrawerResizing(true);
+
+    function onMouseMove(moveEvent: globalThis.MouseEvent) {
+      const currentMain = mainRef.current;
+      if (!currentMain) {
+        return;
+      }
+      const mainRect = currentMain.getBoundingClientRect();
+      const nextWidth = clampGraphDrawerWidth(mainRect.right - moveEvent.clientX, mainRect.width);
+      setGraphDrawerWidth(nextWidth);
+    }
+
+    function onMouseUp() {
+      setGraphDrawerResizing(false);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    }
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
   }
 
   const appToastMessage =
@@ -133,42 +184,55 @@ export function WorkspaceChatPageImpl({
           }}
           onSessionExpired={onSessionExpired}
         />
-        <div className="graph-workspace-main">
-          <WorkspaceGraphCanvas
-            graphRevision={graphRevision}
-            boardRef={boardRef}
-            nodes={nodes}
-            visibleNodes={visibleNodes}
-            selectedNodeId={selectedNodeId}
-            nodeEditAnchor={nodeEditAnchor}
-            viewport={viewport}
-            edgeSegments={edgeSegments}
-            chatOpen={chatOpen}
-            messageCount={messages.length}
-            onAddNode={() => setAddNodeModalOpen(true)}
-            onZoom={handleZoom}
-            onViewportReset={() => centerViewport(1)}
-            onBoardMouseDown={handleBoardMouseDown}
-            onBoardMouseMove={handleBoardMouseMove}
-            onBoardMouseUp={handleBoardMouseUp}
-            onNodeClick={handleNodeClick}
-            onEditNode={handleOpenEditNode}
-            onOpenChat={() => setChatOpen(true)}
+        <div className="graph-workspace-main" ref={mainRef}>
+          <WorkspaceChatBox
+            messages={messages}
+            question={question}
+            asking={asking}
+            canAsk={canAsk}
+            selectedRepo={selectedRepo}
+            messageEndRef={messageEndRef}
+            onQuestionChange={setQuestion}
+            onSubmit={handleAskSubmit}
+            graphOpen={graphDrawerOpen}
+            onToggleGraph={toggleGraph}
+            acceptedDocumentTypes={additionalDocuments.acceptedDocumentTypes}
+            onUploadDocument={additionalDocuments.handleFileChange}
           >
-            {chatOpen ? (
-              <WorkspaceChatBox
-                messages={messages}
-                question={question}
-                asking={asking}
-                canAsk={canAsk}
-                selectedRepo={selectedRepo}
-                messageEndRef={messageEndRef}
-                onQuestionChange={setQuestion}
-                onSubmit={handleAskSubmit}
-                onClose={() => setChatOpen(false)}
+            <div
+              className={`graph-drawer${graphDrawerOpen ? " is-open" : ""}${graphDrawerResizing ? " is-resizing" : ""}`}
+              role="dialog"
+              aria-label="Hierarchy graph"
+              aria-hidden={!graphDrawerOpen}
+              style={{ width: graphDrawerWidth ?? undefined }}
+            >
+              <div
+                className="graph-drawer-resize-handle"
+                onMouseDown={startDrawerResize}
+                aria-hidden="true"
+              >
+                <span className="graph-drawer-resize-grip" />
+              </div>
+              <WorkspaceGraphCanvas
+                graphRevision={graphRevision}
+                boardRef={boardRef}
+                nodes={nodes}
+                visibleNodes={visibleNodes}
+                selectedNodeId={selectedNodeId}
+                nodeEditAnchor={nodeEditAnchor}
+                viewport={viewport}
+                edgeSegments={edgeSegments}
+                onAddNode={() => setAddNodeModalOpen(true)}
+                onZoom={handleZoom}
+                onViewportReset={handleViewportReset}
+                onBoardMouseDown={handleBoardMouseDown}
+                onBoardMouseMove={handleBoardMouseMove}
+                onBoardMouseUp={handleBoardMouseUp}
+                onNodeClick={handleNodeClick}
+                onEditNode={handleOpenEditNode}
               />
-            ) : null}
-          </WorkspaceGraphCanvas>
+            </div>
+          </WorkspaceChatBox>
         </div>
       </div>
       <GraphAddNodeModal

@@ -56,10 +56,10 @@ export function useWorkspaceGraph(args: UseWorkspaceGraphArgs) {
     const resolvedParentId = draft.parentNodeId || "";
     const canSubmit = Boolean(
       trimmedTitle &&
-        draft.relation.trim() &&
-        draft.reason.trim() &&
-        (workspace.can_manage || resolvedParentId) &&
-        (isLinkInvite || trimmedEmail),
+      draft.relation.trim() &&
+      draft.reason.trim() &&
+      (workspace.can_manage || resolvedParentId) &&
+      (isLinkInvite || trimmedEmail),
     );
     if (createNodeInFlightRef.current || graphMutating || !canSubmit) {
       return false;
@@ -295,6 +295,12 @@ export function useWorkspaceGraph(args: UseWorkspaceGraphArgs) {
       scale: clamp(currentViewport.scale + delta, 0.5, 1.6),
     }));
   }
+  function handleViewportReset() {
+    setViewport((currentViewport) => ({
+      ...currentViewport,
+      scale: 1,
+    }));
+  }
 
   return {
     addNodeModalOpen,
@@ -336,7 +342,7 @@ export function useWorkspaceGraph(args: UseWorkspaceGraphArgs) {
     handleNodeClick,
     handleOpenEditNode,
     handleZoom,
+    handleViewportReset,
     setViewport,
-    centerViewport: model.centerViewport,
   };
 }

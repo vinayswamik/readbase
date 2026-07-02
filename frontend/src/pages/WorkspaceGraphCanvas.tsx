@@ -1,4 +1,4 @@
-import type { MouseEvent, ReactNode, RefObject } from "react";
+import type { MouseEvent, Ref } from "react";
 
 import userPlusIconMarkup from "../assets/icons/user-plus.svg?raw";
 
@@ -38,9 +38,6 @@ export function WorkspaceGraphCanvas({
   nodeEditAnchor,
   viewport,
   edgeSegments,
-  chatOpen,
-  messageCount,
-  children,
   onAddNode,
   onZoom,
   onViewportReset,
@@ -49,19 +46,15 @@ export function WorkspaceGraphCanvas({
   onBoardMouseUp,
   onNodeClick,
   onEditNode,
-  onOpenChat,
 }: {
   graphRevision: number;
-  boardRef: RefObject<HTMLDivElement | null>;
+  boardRef: Ref<HTMLDivElement>;
   nodes: HierarchyNode[];
   visibleNodes: HierarchyNode[];
   selectedNodeId: string | null;
   nodeEditAnchor: NodeEditAnchor | null;
   viewport: Viewport;
   edgeSegments: EdgeSegment[];
-  chatOpen: boolean;
-  messageCount: number;
-  children: ReactNode;
   onAddNode: () => void;
   onZoom: (delta: number) => void;
   onViewportReset: () => void;
@@ -70,7 +63,6 @@ export function WorkspaceGraphCanvas({
   onBoardMouseUp: () => void;
   onNodeClick: (event: MouseEvent<HTMLButtonElement>, node: HierarchyNode) => void;
   onEditNode: (node: HierarchyNode) => void;
-  onOpenChat: () => void;
 }) {
   return (
     <section className="graph-stage" aria-label="Hierarchy graph board">
@@ -184,18 +176,6 @@ export function WorkspaceGraphCanvas({
           ))}
         </div>
       </div>
-      {children}
-      {!chatOpen ? (
-        <button
-          type="button"
-          className="floating-ask-button"
-          onClick={onOpenChat}
-          aria-label="Ask"
-        >
-          <ChatIcon />
-          {messageCount ? <span className="floating-ask-button-badge">{messageCount}</span> : null}
-        </button>
-      ) : null}
     </section>
   );
 }
@@ -211,20 +191,6 @@ function GraphEdge({ edge }: { edge: EdgeSegment }) {
         transform: `rotate(${edge.angle}rad)`,
       }}
     />
-  );
-}
-
-function ChatIcon() {
-  return (
-    <svg className="floating-ask-button-icon" viewBox="0 0 24 24" focusable="false" aria-hidden="true">
-      <path
-        d="M7.5 6.75h9a2.25 2.25 0 0 1 2.25 2.25v6.5a2.25 2.25 0 0 1-2.25 2.25h-5.1l-3.18 2.6a.75.75 0 0 1-1.22-.6v-2H7.5a2.25 2.25 0 0 1-2.25-2.25v-6.5A2.25 2.25 0 0 1 7.5 6.75z"
-        fill="none"
-        stroke="currentColor"
-        strokeLinejoin="round"
-        strokeWidth="1.75"
-      />
-    </svg>
   );
 }
 

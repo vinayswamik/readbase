@@ -259,22 +259,7 @@
     "notion": []
   },
   "additionalDocuments": {
-    "ws-alpha": [
-      {
-        "document_id": "doc-onboarding",
-        "name": "onboarding-checklist.pdf",
-        "created_at": "2026-06-20T10:00:00.000Z",
-        "uploaded_by_user_id": "user-alex",
-        "assigned_user_ids": ["user-alex", "user-sam"]
-      },
-      {
-        "document_id": "doc-architecture",
-        "name": "architecture-notes.md",
-        "created_at": "2026-06-22T14:30:00.000Z",
-        "uploaded_by_user_id": "user-alex",
-        "assigned_user_ids": ["user-alex"]
-      }
-    ],
+    "ws-alpha": [],
     "ws-beta": []
   },
   "emptyLists": {

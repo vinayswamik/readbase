@@ -1,4 +1,6 @@
-import type { FormEvent, RefObject } from "react";
+import { useRef, useState, type ChangeEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type SyntheticEvent } from "react";
+
+import chartIconMarkup from "../assets/icons/chart.svg?raw";
 
 import type { ChatMessage, IndexedRepo, SourceMatch } from "../types";
 
@@ -11,7 +13,11 @@ export function WorkspaceChatBox({
   messageEndRef,
   onQuestionChange,
   onSubmit,
-  onClose,
+  graphOpen,
+  onToggleGraph,
+  acceptedDocumentTypes,
+  onUploadDocument,
+  children,
 }: {
   messages: ChatMessage[];
   question: string;
@@ -20,40 +26,109 @@ export function WorkspaceChatBox({
   selectedRepo: IndexedRepo | null;
   messageEndRef: RefObject<HTMLDivElement | null>;
   onQuestionChange: (question: string) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onClose: () => void;
+  onSubmit: (event: SyntheticEvent<HTMLFormElement>) => void;
+  graphOpen: boolean;
+  onToggleGraph: () => void;
+  acceptedDocumentTypes: string;
+  onUploadDocument: (event: ChangeEvent<HTMLInputElement>) => void;
+  children?: ReactNode;
 }) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [togglePressed, setTogglePressed] = useState(false);
+  const toggleEngagedRef = useRef(false);
+
+  function handleAddSourcesClick() {
+    fileInputRef.current?.click();
+  }
+
   return (
-    <section className="chat-overlay" aria-label="Ask workspace">
-      <header className="chat-overlay-header">
-        <div>
-          <h2>Ask</h2>
-          <p>{selectedRepo ? repoLabel(selectedRepo) : "Workspace sources"}</p>
+    <section className="chat-panel" aria-label="Ask workspace">
+      <div className="chat-panel-body">
+        <div className="overlay-messages">
+          {messages.length ? (
+            messages.map((message) => <MessageBubble key={message.id} message={message} />)
+          ) : (
+            <article className="message assistant">
+              <div className="message-body empty-message">No questions yet.</div>
+            </article>
+          )}
+          <div ref={messageEndRef} />
         </div>
-        <button type="button" className="secondary-action-button" onClick={onClose}>
-          Close
-        </button>
-      </header>
-      <div className="overlay-messages">
-        {messages.length ? (
-          messages.map((message) => <MessageBubble key={message.id} message={message} />)
-        ) : (
-          <article className="message assistant">
-            <div className="message-body empty-message">No questions yet.</div>
-          </article>
-        )}
-        <div ref={messageEndRef} />
+        {children}
       </div>
-      <form className="ask-form overlay-ask-form" onSubmit={onSubmit}>
-        <textarea
-          rows={2}
-          value={question}
-          placeholder={selectedRepo ? `Ask about ${repoLabel(selectedRepo)}` : "Ask across workspace sources"}
-          required
-          onChange={(event) => onQuestionChange(event.target.value)}
-        />
-        <button type="submit" disabled={!canAsk} className="primary-button">
-          {asking ? "Thinking..." : "Ask"}
+      <form className="chat-panel-bar" onSubmit={onSubmit}>
+        <div className="chat-panel-bar-actions">
+          <button
+            type="button"
+            className="secondary-action-button"
+            aria-label="History"
+            title="History"
+          >
+            <HistoryIcon />
+          </button>
+          <button
+            type="button"
+            className="secondary-action-button"
+            aria-label="Add sources"
+            title="Add sources"
+            onClick={handleAddSourcesClick}
+          >
+            <PlusIcon />
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={acceptedDocumentTypes}
+            multiple
+            hidden
+            onChange={onUploadDocument}
+          />
+        </div>
+        <div className="chat-panel-bar-input">
+          <textarea
+            rows={2}
+            value={question}
+            placeholder={selectedRepo ? `Ask about ${repoLabel(selectedRepo)}` : "Ask across workspace sources"}
+            required
+            onChange={(event) => onQuestionChange(event.target.value)}
+          />
+          <button type="submit" disabled={!canAsk} className="primary-button">
+            {asking ? "Thinking..." : "Ask"}
+          </button>
+        </div>
+        <button
+          type="button"
+          className={`chat-panel-bar-toggle${togglePressed ? " is-pressed" : ""}`}
+          onPointerDown={(event) => {
+            if (event.button !== 0) {
+              return;
+            }
+            toggleEngagedRef.current = true;
+            setTogglePressed(true);
+            event.currentTarget.setPointerCapture(event.pointerId);
+          }}
+          onPointerUp={(event) => {
+            if (event.button !== 0) {
+              return;
+            }
+            const engaged = toggleEngagedRef.current;
+            toggleEngagedRef.current = false;
+            setTogglePressed(false);
+            if (!engaged) {
+              return;
+            }
+            event.preventDefault();
+            onToggleGraph();
+          }}
+          onPointerCancel={() => {
+            toggleEngagedRef.current = false;
+            setTogglePressed(false);
+          }}
+          aria-pressed={graphOpen}
+          aria-label="Chart"
+          data-tooltip="Chart"
+        >
+          <ChartIcon />
         </button>
       </form>
     </section>
@@ -102,4 +177,55 @@ function repoLabel(repo: IndexedRepo): string {
 
 function formatScore(score: number): string {
   return Number.isFinite(score) ? score.toFixed(3) : String(score);
+}
+
+function HistoryIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" focusable="false" aria-hidden="true">
+      <path
+        d="M12 8v4l3 2"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M3.05 11A9 9 0 1 1 6 18.7"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M3 4v4h4"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" focusable="false" aria-hidden="true">
+      <path
+        d="M12 5v14M5 12h14"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function ChartIcon() {
+  return (
+    <span
+      className="chat-panel-bar-toggle-icon"
+      aria-hidden="true"
+      dangerouslySetInnerHTML={{ __html: chartIconMarkup }}
+    />
+  );
 }
