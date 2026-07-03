@@ -170,23 +170,33 @@ export function HomePage({
     };
   }, [refreshInvites]);
 
+  const workspaceNav = useMemo(() => {
+    if (selectedWorkspace) {
+      return {
+        workspaceId: selectedWorkspace.workspace_id,
+        name: selectedWorkspace.name,
+        canManage: selectedWorkspace.can_manage,
+        onGoToWorkspaces: () => setSelectedWorkspace(null),
+        onRenamed: (workspace: Workspace) => setSelectedWorkspaceState(workspace),
+        onSessionExpired,
+      };
+    }
+    if (appRoute.screen !== "workspace") {
+      return undefined;
+    }
+    return {
+      workspaceId: appRoute.workspaceId,
+      name: "\u00a0",
+      canManage: false,
+      onGoToWorkspaces: () => setSelectedWorkspace(null),
+      onRenamed: () => {},
+      onSessionExpired,
+    };
+  }, [appRoute, onSessionExpired, selectedWorkspace]);
+
   return (
     <main className="home-page">
-      <AppTopbar
-        sticky
-        workspaceNav={
-          selectedWorkspace
-            ? {
-                workspaceId: selectedWorkspace.workspace_id,
-                name: selectedWorkspace.name,
-                canManage: selectedWorkspace.can_manage,
-                onGoToWorkspaces: () => setSelectedWorkspace(null),
-                onRenamed: (workspace) => setSelectedWorkspaceState(workspace),
-                onSessionExpired,
-              }
-            : undefined
-        }
-      >
+      <AppTopbar sticky workspaceNav={workspaceNav}>
         <div className="home-topbar-actions">
           {selectedWorkspace ? (
             <button
@@ -225,7 +235,7 @@ export function HomePage({
             onBack={() => setSelectedWorkspace(null)}
             onSessionExpired={onSessionExpired}
           />
-        ) : (
+        ) : appRoute.screen === "workspace" ? null : (
           <div className="home-content-body">
             <WorkspaceDashboardPage
               key={workspaceRefreshKey}

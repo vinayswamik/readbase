@@ -65,6 +65,44 @@ export function getVisibleNodes(
   );
 }
 
+export function computeGraphBounds(
+  nodes: HierarchyNode[],
+): { minX: number; minY: number; maxX: number; maxY: number } | null {
+  if (!nodes.length) {
+    return null;
+  }
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const node of nodes) {
+    minX = Math.min(minX, node.x);
+    minY = Math.min(minY, node.y);
+    maxX = Math.max(maxX, node.x + NODE_WIDTH);
+    maxY = Math.max(maxY, node.y + NODE_HEIGHT);
+  }
+  return { minX, minY, maxX, maxY };
+}
+
+export function centerViewport(
+  bounds: { minX: number; minY: number; maxX: number; maxY: number },
+  boardSize: BoardSize,
+  scale: number = 1,
+): Viewport {
+  const contentW = bounds.maxX - bounds.minX;
+  const contentH = bounds.maxY - bounds.minY;
+  const boardW = boardSize.width || 1200;
+  const boardH = boardSize.height || 800;
+  // Translate so that the center of the graph bounds lands at the center
+  // of the board. transform = translate(x, y) scale(s); the board's
+  // visible center in canvas space is (boardW/2 - x, boardH/2 - y).
+  return {
+    x: (boardW - contentW * scale) / 2 - bounds.minX * scale,
+    y: (boardH - contentH * scale) / 2 - bounds.minY * scale,
+    scale,
+  };
+}
+
 export function layoutHierarchyNodes(
   nodes: HierarchyNode[],
   connections: HierarchyConnection[],
@@ -178,7 +216,6 @@ export function useWorkspaceGraphModel({
   const [connections, setConnections] = useState<HierarchyConnection[]>([]);
   const [graphStatus, setGraphStatus] = useState("");
   const [graphMutating, setGraphMutating] = useState(false);
-  const [graphRevision, setGraphRevision] = useState(0);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [assignableUsers, setAssignableUsers] = useState<
     HierarchyAssignableUser[]
@@ -204,6 +241,7 @@ export function useWorkspaceGraphModel({
     setBoardNode(node);
   }, []);
   const queuedGraphRefreshRef = useRef<number | null>(null);
+  const autoCenteredRef = useRef(false);
 
   const selectedNode = useMemo(
     () => nodes.find((node) => node.node_id === selectedNodeId) ?? null,
@@ -293,7 +331,6 @@ export function useWorkspaceGraphModel({
       setConnections(result.connections || []);
       setAssignableUsers(result.assignable_users || []);
       setGraphStatus("");
-      setGraphRevision((revision) => revision + 1);
     } catch (error) {
       handleApiError(error, setGraphStatus);
     }
@@ -315,7 +352,26 @@ export function useWorkspaceGraphModel({
 
   useEffect(() => {
     setViewport({ x: 120, y: 80, scale: 1 });
+    autoCenteredRef.current = false;
   }, [workspace.workspace_id]);
+
+  // Auto-center the graph inside the drawer (board) once we know both the
+  // laid-out node bounds and the measured board size. Runs a single time
+  // per workspace so the user's manual pan/zoom is preserved afterwards.
+  useEffect(() => {
+    if (autoCenteredRef.current) {
+      return;
+    }
+    if (!graphNodes.length || !boardSize.width || !boardSize.height) {
+      return;
+    }
+    const bounds = computeGraphBounds(graphNodes);
+    if (!bounds) {
+      return;
+    }
+    setViewport(centerViewport(bounds, boardSize, 1));
+    autoCenteredRef.current = true;
+  }, [graphNodes, boardSize]);
 
   useEffect(
     () => () => {
@@ -370,7 +426,6 @@ export function useWorkspaceGraphModel({
     setGraphStatus,
     graphMutating,
     setGraphMutating,
-    graphRevision,
     selectedNodeId,
     setSelectedNodeId,
     editTitle,
@@ -382,6 +437,7 @@ export function useWorkspaceGraphModel({
     viewport,
     setViewport,
     boardSize,
+    graphNodes,
     panState,
     setPanState,
     createNodeInFlightRef,

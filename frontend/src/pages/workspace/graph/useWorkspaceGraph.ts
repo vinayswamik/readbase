@@ -5,7 +5,12 @@ import type { CreateHierarchyNodeResponse, HierarchyNode } from "../../../types"
 import type { CreateNodeDraft } from "./types";
 import type { NodeEditAnchor } from "../../WorkspaceGraphCanvas";
 import { buildInviteJoinUrl } from "../WorkspacePanelControls";
-import { clamp, useWorkspaceGraphModel } from "./useWorkspaceGraphModel";
+import {
+  centerViewport,
+  clamp,
+  computeGraphBounds,
+  useWorkspaceGraphModel,
+} from "./useWorkspaceGraphModel";
 
 type UseWorkspaceGraphArgs = {
   workspace: import("../../../types").Workspace;
@@ -38,6 +43,8 @@ export function useWorkspaceGraph(args: UseWorkspaceGraphArgs) {
     setReparentNodeId,
     viewport,
     setViewport,
+    boardSize,
+    graphNodes,
     panState,
     setPanState,
     createNodeInFlightRef,
@@ -296,10 +303,12 @@ export function useWorkspaceGraph(args: UseWorkspaceGraphArgs) {
     }));
   }
   function handleViewportReset() {
-    setViewport((currentViewport) => ({
-      ...currentViewport,
-      scale: 1,
-    }));
+    const bounds = computeGraphBounds(graphNodes);
+    if (!bounds || !boardSize.width || !boardSize.height) {
+      setViewport((currentViewport) => ({ ...currentViewport, scale: 1 }));
+      return;
+    }
+    setViewport(centerViewport(bounds, boardSize, 1));
   }
 
   return {
@@ -311,7 +320,6 @@ export function useWorkspaceGraph(args: UseWorkspaceGraphArgs) {
     nodes,
     graphMutating,
     graphStatus,
-    graphRevision: model.graphRevision,
     selectedNodeId,
     selectedNode,
     parentOptions: model.parentOptions,

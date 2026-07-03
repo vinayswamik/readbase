@@ -91,7 +91,7 @@ button {
 .app-topbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 16px;
   box-sizing: border-box;
   width: 100%;
@@ -117,16 +117,18 @@ button {
   gap: 0.45em;
   color: var(--ink);
   font-size: var(--brand-logo-size, 22px);
-  font-weight: 400;
-  line-height: 1;
+  /* font-weight: 400; */
+  /* line-height: 1; */
 }
 
 .brand-logo-button {
   border: 0;
   background: transparent;
   cursor: pointer;
-  padding: 0;
-  border-radius: 8px;
+  /* padding: 0; */
+  height: auto;
+  width: auto;
+  border-radius: 10px;
 }
 
 .brand-logo-button:hover {
@@ -134,10 +136,10 @@ button {
   background: #f2f4f7;
 }
 
-.brand-logo-button:focus-visible {
+/* .brand-logo-button:focus-visible {
   outline: 0;
   box-shadow: 0 0 0 4px var(--focus-ring);
-}
+} */
 
 .brand-logo--icon-only {
   gap: 0;
@@ -174,18 +176,11 @@ button {
   transform: translateY(-0.05em);
 }
 
-.app-topbar-leading {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  flex: 1;
-}
-
 .app-topbar-trailing {
   display: flex;
   align-items: center;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 .app-topbar-workspace-title {
@@ -205,6 +200,7 @@ button {
   align-items: center;
   gap: 6px;
   min-width: 0;
+  flex: 1;
 }
 
 .app-topbar-workspace-rename-button {
@@ -241,12 +237,15 @@ button {
   display: grid;
   gap: 4px;
   min-width: 0;
-  max-width: min(420px, 100%);
+  flex: 1;
+  justify-items: start;
 }
 
 .app-topbar-workspace-rename-input-wrap {
   position: relative;
   min-width: 0;
+  width: 100%;
+  max-width: min(420px, 100%);
 }
 
 .app-topbar-workspace-rename-input-wrap--with-status .app-topbar-workspace-rename-input {
@@ -387,12 +386,13 @@ button {
 
 .home-topbar-actions .secondary-action-button {
   font-weight: 600;
+  height: auto;
 }
 
-.home-sources-button {
+/* .home-sources-button {
   min-height: 36px;
   padding: 0 14px;
-}
+} */
 
 .home-connector-marquee {
   flex-shrink: 0;
@@ -1549,7 +1549,7 @@ button {
 }
 
 .secondary-action-button {
-  min-height: 38px;
+  align-self: stretch;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
@@ -3493,6 +3493,9 @@ button {
   height: 1px;
   overflow: visible;
   transform-origin: 0 0;
+  /* Pan/zoom uses translate/scale on this element; promote it so those
+     transforms don't trigger layout on the parent drawer mid-slide. */
+  will-change: transform;
 }
 
 .graph-edges {
@@ -4130,25 +4133,15 @@ button {
   background: #fff;
   border-left: 1px solid var(--line);
   box-shadow: -16px 0 40px rgba(16, 24, 40, 0.18);
-  transform: translateX(100%);
-  transition:
-    transform 220ms ease,
-    visibility 0s ease 220ms;
+  transform: translate3d(100%, 0, 0);
+  transition: transform 280ms cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: none;
-  visibility: hidden;
+  will-change: transform;
 }
 
 .chat-panel-body > .graph-drawer.is-open {
-  transform: translateX(0);
+  transform: translate3d(0, 0, 0);
   pointer-events: auto;
-  visibility: visible;
-  transition:
-    transform 220ms ease,
-    visibility 0s ease 0s;
-}
-
-.graph-drawer.is-resizing {
-  transition: none;
 }
 
 .graph-drawer-resize-handle {
@@ -4177,8 +4170,7 @@ button {
   transition: background-color 160ms ease;
 }
 
-.graph-drawer-resize-handle:hover::after,
-.graph-drawer.is-resizing .graph-drawer-resize-handle::after {
+.graph-drawer-resize-handle:hover::after {
   background: rgba(21, 94, 239, 0.45);
 }
 
@@ -4186,7 +4178,7 @@ button {
 .graph-drawer-resize-grip {
   position: relative;
   display: inline-flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   gap: 2px;
   padding: 5px 3px;
@@ -4200,19 +4192,16 @@ button {
 .graph-drawer-resize-grip::before,
 .graph-drawer-resize-grip::after {
   content: "";
-  width: 12px;
-  height: 2px;
+  width: 2px;
+  height: 12px;
   border-radius: 999px;
   background: var(--muted-subtle);
 }
 
-.graph-drawer-resize-handle:hover .graph-drawer-resize-grip,
-.graph-drawer.is-resizing .graph-drawer-resize-grip {
+.graph-drawer-resize-handle:hover .graph-drawer-resize-grip {
   border-color: rgba(21, 94, 239, 0.45);
 }
 
-.graph-drawer.is-resizing .graph-drawer-resize-grip::before,
-.graph-drawer.is-resizing .graph-drawer-resize-grip::after,
 .graph-drawer-resize-handle:hover .graph-drawer-resize-grip::before,
 .graph-drawer-resize-handle:hover .graph-drawer-resize-grip::after {
   background: rgba(21, 94, 239, 0.85);

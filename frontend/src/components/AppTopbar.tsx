@@ -23,7 +23,7 @@ export function AppTopbar({
   return (
     <header className={sticky ? "app-topbar app-topbar--sticky" : "app-topbar"}>
       {workspaceNav ? (
-        <div className="app-topbar-leading">
+        <>
           <ReadbaseLogo iconOnly onClick={workspaceNav.onGoToWorkspaces} />
           <AppTopbarWorkspaceTitle
             workspaceId={workspaceNav.workspaceId}
@@ -32,7 +32,7 @@ export function AppTopbar({
             onRenamed={workspaceNav.onRenamed}
             onSessionExpired={workspaceNav.onSessionExpired}
           />
-        </div>
+        </>
       ) : (
         <ReadbaseLogo />
       )}

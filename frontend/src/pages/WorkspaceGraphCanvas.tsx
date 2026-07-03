@@ -1,4 +1,4 @@
-import type { MouseEvent, Ref } from "react";
+import { useMemo, type MouseEvent, type Ref } from "react";
 
 import userPlusIconMarkup from "../assets/icons/user-plus.svg?raw";
 
@@ -30,7 +30,6 @@ export type NodeEditAnchor = {
 };
 
 export function WorkspaceGraphCanvas({
-  graphRevision,
   boardRef,
   nodes,
   visibleNodes,
@@ -47,7 +46,6 @@ export function WorkspaceGraphCanvas({
   onNodeClick,
   onEditNode,
 }: {
-  graphRevision: number;
   boardRef: Ref<HTMLDivElement>;
   nodes: HierarchyNode[];
   visibleNodes: HierarchyNode[];
@@ -68,7 +66,6 @@ export function WorkspaceGraphCanvas({
     <section className="graph-stage" aria-label="Hierarchy graph board">
       <div
         ref={boardRef}
-        key={graphRevision}
         className="graph-board"
         onMouseDown={onBoardMouseDown}
         onMouseMove={onBoardMouseMove}
@@ -195,12 +192,20 @@ function GraphEdge({ edge }: { edge: EdgeSegment }) {
 }
 
 function AddNodeIcon() {
-  return (
-    <span
-      className="graph-toolbar-add-node-icon"
-      aria-hidden="true"
-      dangerouslySetInnerHTML={{ __html: userPlusIconMarkup }}
-    />
+  // Memoize so the span keeps stable identity across re-renders.
+  // dangerouslySetInnerHTML re-inserts the SVG markup on every render
+  // otherwise, which causes a visible flicker of the toolbar icon while
+  // the drawer's slide-in animation is running (board mounts, viewport
+  // settles, ResizeObserver fires).
+  return useMemo(
+    () => (
+      <span
+        className="graph-toolbar-add-node-icon"
+        aria-hidden="true"
+        dangerouslySetInnerHTML={{ __html: userPlusIconMarkup }}
+      />
+    ),
+    [],
   );
 }
 

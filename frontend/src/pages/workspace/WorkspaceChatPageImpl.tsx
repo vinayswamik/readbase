@@ -82,7 +82,6 @@ export function WorkspaceChatPageImpl({
     nodes,
     graphMutating,
     graphStatus,
-    graphRevision,
     selectedNodeId,
     selectedNode,
     parentOptions,
@@ -121,10 +120,12 @@ export function WorkspaceChatPageImpl({
 
   function toggleGraph() {
     setGraphDrawerOpen((open) => {
-      if (!open && mainRef.current) {
-        const containerWidth = mainRef.current.getBoundingClientRect().width;
-        setGraphDrawerWidth(getDefaultGraphDrawerWidth(containerWidth));
-      }
+      // Don't pre-set the width on open. The CSS default (width: 70%,
+      // max-width: 960px) already matches getDefaultGraphDrawerWidth, and
+      // setting the inline px value in the same commit as `is-open` causes
+      // a one-frame mismatch the user sees as the drawer "opening at one
+      // width then animating toward another". The inline width is only
+      // needed once the user manually resizes, which startDrawerResize handles.
       return !open;
     });
   }
@@ -214,7 +215,6 @@ export function WorkspaceChatPageImpl({
                 <span className="graph-drawer-resize-grip" />
               </div>
               <WorkspaceGraphCanvas
-                graphRevision={graphRevision}
                 boardRef={boardRef}
                 nodes={nodes}
                 visibleNodes={visibleNodes}
