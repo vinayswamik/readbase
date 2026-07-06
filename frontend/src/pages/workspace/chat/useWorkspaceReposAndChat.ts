@@ -139,6 +139,9 @@ export function useWorkspaceChat({
   const messageEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    if (!messages.length) {
+      return;
+    }
     messageEndRef.current?.scrollIntoView({ block: "end" });
   }, [messages, chatOpen]);
 

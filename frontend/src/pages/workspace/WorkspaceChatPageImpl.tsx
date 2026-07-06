@@ -1,4 +1,4 @@
-import { useRef, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 
 import type { AuthUser, Workspace } from "../../types";
 import { AppToast } from "../../components/AppToast";
@@ -62,6 +62,10 @@ export function WorkspaceChatPageImpl({
     workspaceId: workspace.workspace_id,
     onSessionExpired,
   });
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [workspace.workspace_id]);
 
   const { repoId, repoListError, selectedRepo } = repos;
   const {
@@ -230,6 +234,7 @@ export function WorkspaceChatPageImpl({
                 onBoardMouseUp={handleBoardMouseUp}
                 onNodeClick={handleNodeClick}
                 onEditNode={handleOpenEditNode}
+                onClose={() => setGraphDrawerOpen(false)}
               />
             </div>
           </WorkspaceChatBox>

@@ -17,27 +17,16 @@ export function ReadbaseLogo({
   );
 
   const className = iconOnly
-    ? onClick
-      ? "brand-logo brand-logo--icon-only brand-logo-button"
-      : "brand-logo brand-logo--icon-only"
-    : onClick
-      ? "brand-logo brand-logo-button"
-      : "brand-logo";
-
-  if (!onClick) {
-    return (
-      <span className={className} aria-label="Readbase">
-        {logo}
-      </span>
-    );
-  }
+    ? "brand-logo brand-logo--icon-only brand-logo-button"
+    : "brand-logo brand-logo-button";
 
   return (
     <button
       type="button"
       className={className}
+      disabled={!onClick}
       onClick={onClick}
-      aria-label="Back to workspaces"
+      aria-label={iconOnly && onClick ? "Back to workspaces" : "Readbase"}
     >
       {logo}
     </button>

@@ -1,182 +1,118 @@
-# Readbase
+<p align="center">
+  <img src="frontend/src/assets/readbase-logo.svg" alt="Readbase logo" width="120" />
+</p>
 
-Readbase is a small codebase Q&A prototype. Paste a GitHub repository URL, let the app clone and index it locally, then ask questions against retrieved code snippets instead of sending an entire repository to an LLM.
+<h1 align="center">Readbase</h1>
 
-## What This First Step Includes
+Readbase is a workspace-centric knowledge assistant that indexes your code
+repositories and connected SaaS tools so teams can ask questions and get
+grounded answers backed by their own source material.
 
-- GitHub repo cloning with `git clone --depth 1`
-- Source-file discovery with common generated/vendor folders skipped
-- Line-based chunking for code and documentation
-- FastAPI backend served by uvicorn
-- ChromaDB-backed local retrieval stored in `.readbase/chroma`
-- Optional LLM synthesis via `ANTHROPIC_API_KEY` and `ANTHROPIC_MODEL`
-- React + TypeScript browser UI for indexing a repo and asking questions
-- Organization OIDC sign-in with opaque server-side sessions
-- Workspace dashboard with per-workspace repository indexes
-- Clear UI -> API routes -> backend services -> storage/provider boundaries
+## Overview
+
+Readbase connects to the systems your team already works in — GitHub, GitLab,
+Bitbucket, Jira, Linear, Confluence, Notion, and Slack — indexes the content
+into a vector store, and exposes a chat experience that grounds every answer
+in retrieved context.
+
+- **Workspace-scoped**: each workspace holds its own repos, connectors, members, and chat history.
+- **Retrieval-augmented answers**: source files and connector content are chunked, embedded, and retrieved at query time.
+- **Multiple connectors**: bring docs, issues, and discussions from across your toolchain into one index.
+- **CLI and web**: drive Readbase from the browser UI or script it from the command line.
 
 ## Architecture
 
-```text
-React UI / local CLI
-    |
-    v
-API routes and adapters
-src/backend/api/*
-    |
-    v
-Backend services
-src/backend/application/services/*
-    |
-    v
-Storage and provider logic
-src/backend/infrastructure/*
-.readbase/ or READBASE_DATA_DIR
-  workspaces/
-PostgreSQL / DATABASE_URL
-Anthropic API
-```
+| Layer    | Stack                                                        |
+|----------|--------------------------------------------------------------|
+| Backend  | Python, FastAPI, SQLAlchemy, Alembic, ChromaDB, Uvicorn      |
+| Frontend | React 19, TypeScript, Vite                                   |
+| Database | PostgreSQL (via `psycopg`) or SQLite for local development   |
+| Auth     | OIDC single sign-on, sessions, CSRF protection, rate limiting|
 
-- `frontend/` contains frontend-only code and talks to `/api/*`.
-- `server.py` assembles the FastAPI app and serves the built frontend.
-- `src/backend/api/` owns HTTP request/response schemas and route handlers.
-- `src/backend/application/services/` owns use cases shared by API routes and CLI.
-- `src/backend/infrastructure/ingestion/` owns repository cloning, file discovery, and chunking.
-- `src/backend/infrastructure/retrieval/` owns ChromaDB indexing and search.
-- `src/backend/infrastructure/generation/` owns answer generation and LLM provider calls.
-- `src/backend/config/` owns runtime paths and tunable settings.
+The backend follows a layered structure under `src/backend/`:
 
-## Source Map
+- `api/` — FastAPI routes and request/response schemas
+- `application/services/` — business logic, connectors, auth, and sync schedulers
+- `infrastructure/` — database models, storage, and the answer/retrieval pipeline
+- `config/` — environment loading and application settings
 
-```text
-src/
-  backend/
-    api/                       FastAPI schemas, error mapping, route controllers
-    application/
-      services/                Use-case layer shared by API routes and CLI
-    infrastructure/
-      ingestion/               Git clone, source file filtering, chunk creation
-      retrieval/               ChromaDB persistence, embedding, search
-      generation/              Retrieval-only answers and Anthropic synthesis
-    config/                    Environment loading, storage paths, constants
-  cli.py                       Local command-line adapter
-```
+## Getting started
 
-## Setup
+### Prerequisites
+
+- Python 3.11+
+- Node.js 20+ with npm
+- PostgreSQL (or use the default SQLite for local development)
+
+### Install dependencies
 
 ```bash
-python3 -m venv .venv
 pip install -r requirements.txt
-pip install -e .
+cd frontend && npm install
 ```
 
-## Run
+### Configure
+
+Readbase reads a `.env` file at the project root on startup. Common variables:
+
+| Variable                   | Description                                              |
+|----------------------------|----------------------------------------------------------|
+| `DATABASE_URL`             | SQLAlchemy database URL (defaults to local SQLite)       |
+| `READBASE_DATA_DIR`        | Where indexes, repos, and Chroma data live              |
+| `READBASE_DEPLOYMENT_MODE` | `saas` (default) or `customer`                           |
+| `READBASE_SSL_CERTFILE`    | Optional path to a TLS cert for HTTPS                    |
+| `READBASE_SSL_KEYFILE`     | Optional path to a TLS key for HTTPS                     |
+
+### Run
+
+From the project root:
 
 ```bash
 python3 server.py
 ```
 
-Then open `http://127.0.0.1:8000`.
+This builds the frontend and starts the FastAPI app at `http://127.0.0.1:8000`.
 
 ## CLI
 
-1) Create a workspace:
+The CLI (`src/cli.py`) offers quick indexing and Q&A without the UI:
 
 ```bash
-readbase create "My Workspace"
+# Index a GitHub repo or local directory
+python3 -m src.cli index <github-url-or-path>
+
+# Start an interactive Q&A session against an indexed repo
+python3 -m src.cli ask
+
+# Manage workspaces
+python3 -m src.cli create <name>
+python3 -m src.cli space <name> -del
 ```
 
-This also makes the workspace active for later CLI commands.
-
-2) Index a repository from GitHub URL or local path into the active workspace:
+## Testing
 
 ```bash
-readbase index "<github-url / local-path>"
+python3 -m pytest
 ```
 
-3) Start CLI Q&A in the active workspace:
+## Project structure
 
-```bash
-readbase ask
+```
+readbase/
+├── server.py                 # FastAPI app + frontend build entrypoint
+├── src/
+│   ├── cli.py                # Command-line interface
+│   └── backend/
+│       ├── api/              # Routes, schemas, security middleware
+│       ├── application/      # Services, connectors, auth
+│       ├── infrastructure/   # Database, storage, retrieval/generation
+│       └── config/           # Settings and environment loading
+├── alembic/                  # Database migrations
+├── frontend/                 # React + Vite SPA
+├── tests/                    # Test suite
+└── requirements.txt
 ```
 
-- `readbase ask` shows available indexes, asks you to choose one by number, then opens a question loop.
-- Exit Q&A with `exit` or `quit`.
-- Optional: `readbase ask --repo-id <repo_id>`.
-- Optional: use `--workspace <name-or-id>` with `readbase index` or `readbase ask`.
-- Delete a workspace with a warning prompt: `readbase space "My Workspace" -del`.
+## License
 
-## API types (TypeScript)
-
-The frontend keeps **hand-written UI types** (`ChatMessage`, etc.) and derives **API contract types** from the FastAPI OpenAPI schema so they stay aligned with backend changes.
-
-```bash
-python3 scripts/generate_api_types.py
-# or from frontend/
-npm run generate:api-types
-```
-
-This writes:
-
-- `openapi.json` — exported from FastAPI route schemas
-- `frontend/src/api/generated.ts` — auto-generated (do not edit)
-- `frontend/src/api/contract.ts` — stable frontend names over generated schemas
-- `frontend/src/types.ts` — re-exports contract types for the rest of the app
-
-Regenerate after changing `src/backend/api/schemas.py` or route `response_model`s.
-
-## Login and Workspaces
-
-The browser app uses **organization OIDC** sign-in (`Sign in with your organization`). For local dev, configure Google as the OIDC provider. After signing in, every user can:
-
-- Create a workspace (the creator becomes the workspace owner and can manage members, connectors, and deletion).
-- Join a workspace with an invite code shared by the workspace owner.
-- Workspace owners can also add members by email and copy the invite code from the Members panel.
-
-Create a PostgreSQL database and set:
-
-```bash
-DATABASE_URL=postgresql+psycopg://readbase:readbase@127.0.0.1:5432/readbase
-```
-
-Run migrations with:
-
-```bash
-alembic upgrade head
-```
-
-## Test
-
-```bash
-python -m unittest discover -s tests
-```
-
-## Frontend
-
-The frontend is a self-contained Vite React + TypeScript app under `frontend/`.
-The Python server builds it and serves the production files from `frontend/dist`.
-
-```bash
-cd frontend
-npm install
-```
-
-## Optional LLM Answers
-
-Create a `.env` file:
-
-```bash
-ANTHROPIC_API_KEY=your_api_key
-ANTHROPIC_MODEL=your_model_name
-READBASE_DATA_DIR=.readbase
-DATABASE_URL=postgresql+psycopg://readbase:readbase@127.0.0.1:5432/readbase
-```
-
-If either Anthropic value is missing, the app still works in retrieval-only mode and returns the most relevant snippets with citations.
-
-## Next Small Steps
-
-1. Add incremental indexing for repo updates.
-2. Add hybrid retrieval that combines Chroma semantic search with exact symbol/path matches.
-3. Add branch selection and private repo support.
-4. Add answer quality evaluation on known codebase questions.
+Proprietary. All rights reserved.

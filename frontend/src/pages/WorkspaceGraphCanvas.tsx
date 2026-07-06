@@ -45,6 +45,7 @@ export function WorkspaceGraphCanvas({
   onBoardMouseUp,
   onNodeClick,
   onEditNode,
+  onClose,
 }: {
   boardRef: Ref<HTMLDivElement>;
   nodes: HierarchyNode[];
@@ -61,6 +62,7 @@ export function WorkspaceGraphCanvas({
   onBoardMouseUp: () => void;
   onNodeClick: (event: MouseEvent<HTMLButtonElement>, node: HierarchyNode) => void;
   onEditNode: (node: HierarchyNode) => void;
+  onClose: () => void;
 }) {
   return (
     <section className="graph-stage" aria-label="Hierarchy graph board">
@@ -72,11 +74,24 @@ export function WorkspaceGraphCanvas({
         onMouseUp={onBoardMouseUp}
         onMouseLeave={onBoardMouseUp}
         onWheel={(event) => {
+          if (!event.ctrlKey && !event.metaKey) {
+            return;
+          }
           event.preventDefault();
           onZoom(event.deltaY > 0 ? -0.08 : 0.08);
         }}
         onContextMenu={(event) => event.preventDefault()}
       >
+        <button
+          type="button"
+          className="graph-board-close"
+          onClick={onClose}
+          aria-label="close"
+          data-tooltip="close"
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <CloseIcon />
+        </button>
         <div
           className="graph-toolbar-cluster"
           aria-label="Board controls"
@@ -221,6 +236,20 @@ function ResetViewportIcon() {
         strokeWidth="1.75"
       />
       <circle cx="12" cy="12" r="1.75" fill="currentColor" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+      <path
+        d="M6 6l12 12M18 6L6 18"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }

@@ -10,9 +10,10 @@
   --button-hover: #004eea;
   --focus-ring: rgba(21, 94, 239, 0.18);
   --panel-shadow: 0 20px 48px rgba(16, 24, 40, 0.1);
-  --app-topbar-height: 8vh;
+  --app-topbar-height: 56px;
   --app-topbar-padding-x: 32px;
-  --app-main-height: 92vh;
+  --app-layout-min-height: 680px;
+  --app-main-min-height: calc(var(--app-layout-min-height) - var(--app-topbar-height));
   --app-layout-min-width: 1024px;
   --app-dashboard-panel-min-width: 920px;
   --app-modal-width: 440px;
@@ -22,7 +23,7 @@
   --workspace-sources-panel-width: 380px;
   --workspace-graph-min-width: 320px;
   --graph-workspace-min-width: calc(var(--workspace-sources-panel-width) + var(--workspace-graph-min-width));
-  --app-chat-panel-bar-height: 8vh;
+  --app-chat-panel-bar-height: auto;
   --app-graph-drawer-width: min(70vw, 960px);
   --workspace-sources-connectors-min-height: auto;
   --workspace-documents-panel-height: auto;
@@ -35,8 +36,8 @@
 html,
 body,
 #root {
-  min-height: 100dvh;
   height: auto;
+  min-height: 0;
 }
 
 body {
@@ -57,7 +58,7 @@ button {
 .login-page {
   display: flex;
   flex-direction: column;
-  min-height: 100dvh;
+  min-height: max(var(--app-layout-min-height), 100dvh);
   min-width: var(--app-layout-min-width);
   height: auto;
 }
@@ -74,7 +75,7 @@ button {
   flex-shrink: 0;
   min-width: var(--app-layout-min-width);
   min-height: var(--app-main-min-height);
-  height: var(--app-main-height);
+  height: auto;
 }
 
 .login-page .page-body-surface {
@@ -92,7 +93,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 16px;
+  /* gap: 16px; */
   box-sizing: border-box;
   width: 100%;
   height: var(--app-topbar-height);
@@ -134,6 +135,18 @@ button {
 .brand-logo-button:hover {
   color: var(--ink);
   background: #f2f4f7;
+}
+
+.brand-logo-button:disabled {
+  opacity: 1;
+  cursor: default;
+  color: var(--ink);
+}
+
+.home-page .brand-logo-button:not(.brand-logo--icon-only):hover,
+.login-page .brand-logo-button:hover,
+.brand-logo-button:disabled:hover {
+  background: transparent;
 }
 
 /* .brand-logo-button:focus-visible {
@@ -353,19 +366,19 @@ button {
 .home-page {
   display: flex;
   flex-direction: column;
-  min-height: 100dvh;
+  min-height: max(var(--app-layout-min-height), 100dvh);
   min-width: var(--app-layout-min-width);
   height: auto;
 }
 
 .home-page-main {
   display: flex;
-  flex: 1 0 auto;
+  flex: 1 1 auto;
   flex-shrink: 0;
   flex-direction: column;
   min-width: var(--app-layout-min-width);
   min-height: var(--app-main-min-height);
-  height: var(--app-main-height);
+  height: auto;
 }
 
 .home-content-body {
@@ -2129,25 +2142,22 @@ button {
 .graph-workspace {
   display: flex;
   flex-direction: column;
-  flex: 1 0 auto;
+  flex: 1 1 auto;
   width: 100%;
   min-height: var(--app-main-min-height);
-  height: var(--app-main-height);
   min-width: var(--graph-workspace-min-width);
   flex-shrink: 0;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
+  overflow: hidden;
 }
 
 .graph-workspace-layout {
   display: grid;
   grid-template-columns: minmax(64px, max-content) minmax(0, 1fr);
-  flex: 1 0 auto;
+  flex: 1 1 auto;
   width: 100%;
   min-width: var(--graph-workspace-min-width);
-  min-height: var(--app-main-min-height);
-  height: 100%;
-  overflow: visible;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .graph-workspace-main {
@@ -2155,8 +2165,9 @@ button {
   display: flex;
   flex-direction: column;
   min-width: var(--workspace-graph-min-width);
-  min-height: var(--app-main-min-height);
+  min-height: 0;
   height: 100%;
+  z-index: 1;
   overflow: hidden;
 }
 
@@ -2423,7 +2434,9 @@ button {
   flex-direction: column;
   flex-shrink: 0;
   width: var(--workspace-sources-panel-width);
-  z-index: 2;
+  min-height: 0;
+  height: 100%;
+  z-index: 5;
   border-right: 1px solid var(--line);
   background: var(--bg-panel);
   overflow: visible;
@@ -2438,7 +2451,7 @@ button {
   position: absolute;
   top: 20px;
   right: 0;
-  z-index: 30;
+  z-index: 50;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2480,7 +2493,7 @@ button {
 .workspace-sources-panel-body {
   position: relative;
   flex: 1 1 auto;
-  height: auto;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -2917,8 +2930,9 @@ button {
   gap: 10px;
   flex: 1 1 auto;
   min-height: 0;
-  overflow-x: auto;
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: auto;
   padding: 16px;
   height: auto;
 }
@@ -3485,6 +3499,87 @@ button {
   cursor: grabbing;
 }
 
+.graph-board-close {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 7;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid rgba(16, 24, 40, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(10px);
+  color: #667085;
+  cursor: pointer;
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.05),
+    0 8px 24px rgba(16, 24, 40, 0.1);
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.graph-board-close svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.graph-board-close:hover {
+  background: #fff;
+  color: #344054;
+  border-color: #98a2b3;
+}
+
+.graph-board-close:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.graph-board-close[data-tooltip] {
+  position: absolute;
+}
+
+.graph-board-close[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 8px);
+  transform: translateX(-50%) translateY(-4px);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease,
+    visibility 140ms ease;
+  z-index: 12;
+  box-shadow: none;
+}
+
+.graph-board-close[data-tooltip]:hover::after,
+.graph-board-close[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
 .graph-canvas {
   position: absolute;
   top: 0;
@@ -3972,7 +4067,9 @@ button {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: auto;
   padding: 14px;
 }
 
@@ -4080,6 +4177,7 @@ button {
    On touch, hover is "sticky" after a tap and would flicker against the
    pressed state, so it is restricted to (hover: hover). */
 @media (hover: hover) {
+
   .chat-panel-bar-toggle:hover .chat-panel-bar-toggle-icon,
   .chat-panel-bar-toggle:focus-visible .chat-panel-bar-toggle-icon {
     transform: scale(1.18);
@@ -4120,7 +4218,7 @@ button {
 }
 
 /* ---- Graph drawer (overlays the chat message area only) ---- */
-.chat-panel-body > .graph-drawer {
+.chat-panel-body>.graph-drawer {
   position: absolute;
   top: 0;
   right: 0;
@@ -4139,7 +4237,7 @@ button {
   will-change: transform;
 }
 
-.chat-panel-body > .graph-drawer.is-open {
+.chat-panel-body>.graph-drawer.is-open {
   transform: translate3d(0, 0, 0);
   pointer-events: auto;
 }
